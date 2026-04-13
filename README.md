@@ -1,13 +1,28 @@
-# Proyecto GitFlow Demo
+# gitflow-encargo
 
-## Distintas ramas
+Repositorio para practicar GitFlow. Se simula un flujo colaborativo con features y hotfixes usando Pull Requests.
 
-Se usa GitFlow porque hace más ordenado el trabajo en equipo, ya que separa el desarrollo en distintas ramas según lo que se esté haciendo. Por ejemplo, hay ramas para nuevas funcionalidades (feature), para arreglos urgentes (hotfix) y una rama donde se va integrando todo (develop). Esto ayuda a mantener un mejor control de versiones y que el código en producción sea más estable.
+## Por que GitFlow
 
-Ramas principales:
-- main: código en producción
-- develop: donde se integra el desarrollo
+Separa lo que está en producción de lo que se está desarrollando. Permite trabajar en features por separado y mergear cuando está listo, lo que tiene más sentido para trabajo en equipo que trunk-based donde todo va a una sola rama.
 
-Ramas de soporte:
-- feature/*: para nuevas funcionalidades
-- hotfix/*: para arreglos urgentes
+## Ramas
+
+- **main** → producción
+- **develop** → integración del desarrollo
+- **feature/*** → funcionalidades nuevas, salen de develop
+- **hotfix/*** → arreglos urgentes, salen de main
+
+## Commits
+feat: descripción corta
+fix: descripción
+hotfix: arreglo urgente
+
+## Naming de ramas
+
+- `feature/nombre-funcionalidad`
+- `hotfix/descripcion-problema`
+
+## Merge y Pull Requests
+
+Nunca se pushea directo a main o develop. Todo pasa por PR, se revisa que no haya conflictos y se mergea. Los hotfixes van a main y también a develop para no perder el arreglo.
