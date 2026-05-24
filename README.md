@@ -1,103 +1,114 @@
-# Microservicio de Autenticacion
+# Microservicio de Autenticación
 
-Microservicio REST con Spring Boot que permite registrar e iniciar sesion con usuarios. Forma parte del Encargo 2 de Ingenieria DevOps.
+Microservicio REST desarrollado en Spring Boot para gestionar la autenticación de usuarios. Este proyecto fue contenerizado y automatizado como parte del encargo de la asignatura DOY0101 Ingeniería DevOps.
 
-## Tecnologias usadas
+## Descripción
 
-- Java 17 + Spring Boot 3.2.5
-- JUnit 5 + Mockito + JaCoCo
-- Docker + Docker Compose
+El microservicio expone dos endpoints:
+- `POST /auth/login` recibe un usuario y contraseña, y si son válidos devuelve un token.
+- `GET /auth/health` indica si el servicio está activo.
+
+## Tecnologías usadas
+
+- Java 17
+- Spring Boot 3.2
+- Maven
+- JUnit 5 + Mockito
+- JaCoCo (cobertura de código)
+- Docker
+- Docker Compose
 - GitHub Actions
-- Snyk + Dependabot
-- Nginx
+- Snyk (análisis de seguridad)
+- Dependabot (actualización de dependencias)
 
-## Endpoints
-
-### POST /api/auth/registro
-Registra un usuario nuevo.
-
-Body:
-```json
-{
-  "username": "juan",
-  "password": "mipass123"
-}
-```
-
-Respuestas:
-- `201` Usuario registrado correctamente
-- `409` El usuario ya existe
-- `400` Datos invalidos
-
-### POST /api/auth/login
-Autentica un usuario existente.
-
-Body:
-```json
-{
-  "username": "juan",
-  "password": "mipass123"
-}
-```
-
-Respuestas:
-- `200` Login exitoso
-- `401` Credenciales invalidas
-
-### GET /api/auth/health
-Verifica que el servicio este funcionando.
-
-## Como ejecutar
+## Cómo ejecutar localmente
 
 ### Con Docker Compose
 
 ```bash
-docker compose up -d --build
+docker compose up --build
 ```
 
-Esto levanta el microservicio en el puerto 8080 y Nginx en el puerto 80.
+El servicio queda disponible en `http://localhost:8080`.
 
-### Solo la aplicacion
-
-```bash
-docker build -t microservicio-auth .
-docker run -p 8080:8080 microservicio-auth
-```
-
-### Tests
+### Sin Docker
 
 ```bash
-mvn clean test
+mvn spring-boot:run
 ```
 
 ## Pipeline CI/CD
 
-El pipeline se activa con cada push o pull request a `main` y `develop`. Tiene 4 etapas en orden:
+El pipeline está implementado en GitHub Actions y se ejecuta automáticamente en cada push o pull request a las ramas `main` y `develop`.
 
-**1. test** — Ejecuta los tests con JUnit y verifica cobertura minima del 70% con JaCoCo.
+### Etapas del pipeline
 
-**2. security** — Escanea dependencias e imagen Docker con Snyk. Si encuentra vulnerabilidades HIGH o CRITICAL, bloquea el pipeline y no continua.
+```
+Build → Pruebas Unitarias → Análisis de Seguridad → Build Docker → Despliegue Simulado
+```
 
-**3. build** — Construye la imagen Docker con multi-stage build y la sube a GitHub Container Registry con el tag del commit.
+**1. Build**
+Compila el proyecto con Maven para verificar que no haya errores de compilación.
 
-**4. deploy** — Despliega con Docker Compose, verifica el health check y registra los datos del despliegue (rama, commit, autor, fecha) en el GitHub Step Summary para trazabilidad.
+**2. Pruebas Unitarias**
+Ejecuta los tests con JUnit usando `mvn clean verify`. Genera un reporte de cobertura con JaCoCo que queda disponible como artefacto del workflow.
 
-## Configuracion de secrets
+**3. Análisis de Seguridad**
+Usa Snyk para escanear las dependencias del proyecto. Si encuentra vulnerabilidades de severidad alta o crítica, el pipeline se bloquea y no continúa al siguiente paso. También está configurado Dependabot para abrir pull requests automáticos cuando hay dependencias desactualizadas.
 
-Agregar en Settings → Secrets → Actions:
+**4. Build Docker**
+Construye la imagen Docker del microservicio usando el Dockerfile del proyecto y la guarda como artefacto.
 
-| Secret | Descripcion |
-|--------|-------------|
-| `SNYK_TOKEN` | Token de API de Snyk (se obtiene en snyk.io → Account Settings) |
+**5. Despliegue Simulado**
+Descarga la imagen generada en el paso anterior, la levanta con Docker Compose y verifica que el endpoint `/auth/health` responda correctamente. Si la verificación falla, el pipeline también falla.
 
-El `GITHUB_TOKEN` lo provee GitHub automaticamente.
+### Trazabilidad
 
-## Trazabilidad
+Cada etapa del pipeline depende de la anterior (`needs:`), por lo que si alguna falla, las siguientes no se ejecutan. Esto garantiza que nunca se despliega código que no compiló, que no pasó los tests o que tiene vulnerabilidades conocidas.
 
-Cada despliegue queda registrado en el GitHub Step Summary con la rama, commit SHA, autor y fecha. Esto permite saber exactamente que version esta en cada entorno.
+Los artefactos generados (reporte JaCoCo e imagen Docker) quedan guardados en GitHub Actions para poder revisarlos después de cada ejecución.
 
-## Uso de IA
+### Configuración necesaria
 
-Se utilizo Claude (Anthropic) como apoyo en la generacion de estructura base del proyecto, Dockerfile y configuracion del pipeline. Todo el contenido fue revisado y ajustado por el equipo. Las conclusiones y justificaciones tecnicas son propias.
+Para que el job de seguridad funcione hay que agregar un secret en el repositorio:
 
-Referencia: https://bibliotecas.duoc.cl/ia
+1. Crear una cuenta gratuita en [snyk.io](https://snyk.io)
+2. Copiar el token desde la configuración de la cuenta
+3. Ir a Settings → Secrets → Actions en el repositorio de GitHub
+4. Agregar el secret con el nombre `SNYK_TOKEN`
+
+## Estructura del proyecto
+
+```
+├── src/
+│   ├── main/java/com/encargo/microservicio/
+│   │   ├── controller/AuthController.java
+│   │   ├── model/Usuario.java
+│   │   ├── service/AuthService.java
+│   │   └── MicroservicioApplication.java
+│   └── test/java/com/encargo/microservicio/
+│       ├── AuthControllerTest.java
+│       └── AuthServiceTest.java
+├── .github/
+│   ├── workflows/ci-cd.yml
+│   └── dependabot.yml
+├── Dockerfile
+├── docker-compose.yml
+├── pom.xml
+└── README.md
+```
+
+## Orquestación con Docker Compose
+
+El archivo `docker-compose.yml` define el servicio con un healthcheck que verifica cada 30 segundos que la app esté respondiendo. La red `app-network` permite agregar más servicios en el futuro (base de datos, frontend, etc.) sin exponerlos directamente al exterior.
+
+## Uso de Inteligencia Artificial
+
+Durante el desarrollo de este proyecto se utilizó Claude (Anthropic) como apoyo para:
+- Corrección de errores de compilación en los tests
+- Revisión de la sintaxis del archivo de GitHub Actions
+- Consultas sobre la configuración de Snyk y Dependabot
+
+Todas las decisiones de diseño, la estructura del proyecto y la lógica de autenticación fueron desarrolladas y validadas por el equipo. Las reflexiones personales y justificaciones técnicas son propias.
+
+Referencia de citación IA: https://bibliotecas.duoc.cl/ia
