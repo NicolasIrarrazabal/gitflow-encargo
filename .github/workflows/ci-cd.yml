@@ -58,13 +58,16 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Escaneo con Snyk
-        uses: snyk/actions/maven@master
-        continue-on-error: false
+      - name: Instalar Snyk CLI
+        run: npm install -g snyk
+
+      - name: Autenticar Snyk
+        run: snyk auth ${{ secrets.SNYK_TOKEN }}
+
+      - name: Escaneo de dependencias
+        run: snyk test --severity-threshold=high
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          args: --severity-threshold=high
 
   docker:
     name: Build Docker Image
