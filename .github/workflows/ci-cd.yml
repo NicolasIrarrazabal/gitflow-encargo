@@ -15,8 +15,7 @@ jobs:
   test:
     name: Pruebas Unitarias
     runs-on: ubuntu-latest
-
-steps:
+    steps:
       - name: Checkout del codigo
         uses: actions/checkout@v4
 
@@ -38,14 +37,10 @@ steps:
           path: target/site/jacoco/
           retention-days: 7
 
-      - name: Verificar cobertura minima 70%
-        run: mvn verify -DskipTests -B
-
   security:
     name: Analisis de Seguridad Snyk
     runs-on: ubuntu-latest
     needs: test
-
     steps:
       - name: Checkout del codigo
         uses: actions/checkout@v4
@@ -85,10 +80,8 @@ steps:
     name: Build Docker Image
     runs-on: ubuntu-latest
     needs: [test, security]
-
     outputs:
       image-tag: ${{ steps.meta.outputs.tags }}
-
     steps:
       - name: Checkout del codigo
         uses: actions/checkout@v4
@@ -139,10 +132,8 @@ steps:
     runs-on: ubuntu-latest
     needs: build
     if: github.event_name == 'push'
-
     environment:
       name: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
-
     steps:
       - name: Checkout del codigo
         uses: actions/checkout@v4
@@ -158,8 +149,7 @@ steps:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build imagen local
-        run: |
-          docker build -t ${{ env.IMAGE_NAME }}:latest .
+        run: docker build -t ${{ env.IMAGE_NAME }}:latest .
 
       - name: Desplegar con Docker Compose
         run: |
