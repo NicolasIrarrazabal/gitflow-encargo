@@ -16,7 +16,7 @@ jobs:
     name: Pruebas Unitarias
     runs-on: ubuntu-latest
 
-    steps:
+   steps:
       - name: Checkout del codigo
         uses: actions/checkout@v4
 
@@ -27,11 +27,8 @@ jobs:
           distribution: "temurin"
           cache: maven
 
-      - name: Ejecutar pruebas
-        run: mvn clean test -B
-
-      - name: Generar reporte JaCoCo
-        run: mvn jacoco:report -B
+      - name: Ejecutar pruebas y verificar cobertura
+        run: mvn clean verify -B
 
       - name: Subir reporte de cobertura
         uses: actions/upload-artifact@v4
