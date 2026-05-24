@@ -3,14 +3,11 @@ version: '3.8'
 services:
   microservicio-auth:
     build: .
-    container_name: microservicio-auth
     image: microservicio-auth:latest
-    ports:
-      - "8080:8080"
     networks:
       - app-network
     deploy:
-      replicas: 1
+      replicas: 2
       resources:
         limits:
           cpus: '0.50'

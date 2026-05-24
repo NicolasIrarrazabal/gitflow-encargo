@@ -29,7 +29,7 @@ El microservicio expone dos endpoints:
 docker compose up --build
 ```
 
-El servicio queda disponible en `http://localhost:8080`.
+El servicio queda disponible en `http://localhost:80` a través de nginx.
 
 ### Sin Docker
 
@@ -60,7 +60,7 @@ Usa Snyk para escanear las dependencias del proyecto. Si encuentra vulnerabilida
 Construye la imagen Docker del microservicio usando el Dockerfile del proyecto y la guarda como artefacto.
 
 **5. Despliegue Simulado**
-Descarga la imagen generada en el paso anterior, la levanta con Docker Compose y verifica que el endpoint `/auth/health` responda correctamente. Si la verificación falla, el pipeline también falla.
+Descarga la imagen generada en el paso anterior, la levanta con Docker Compose con 2 réplicas y verifica que el endpoint `/auth/health` responda correctamente a través de nginx. Si la verificación falla, el pipeline también falla.
 
 ### Trazabilidad
 
@@ -101,6 +101,14 @@ Para que el job de seguridad funcione hay que agregar un secret en el repositori
 ## Orquestación con Docker Compose
 
 El archivo `docker-compose.yml` define el servicio con un healthcheck que verifica cada 30 segundos que la app esté respondiendo. La red `app-network` permite agregar más servicios en el futuro (base de datos, frontend, etc.) sin exponerlos directamente al exterior.
+
+El microservicio puede escalarse horizontalmente sin cambios adicionales, ya que el tráfico entra únicamente a través de nginx:
+
+```bash
+docker compose up --build --scale microservicio-auth=2
+```
+
+nginx balancea el tráfico entre réplicas usando round-robin sobre `app-network`.
 
 ## Uso de Inteligencia Artificial
 
