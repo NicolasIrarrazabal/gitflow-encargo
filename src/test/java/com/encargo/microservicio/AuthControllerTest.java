@@ -3,108 +3,65 @@ package com.encargo.microservicio;
 import com.encargo.microservicio.controller.AuthController;
 import com.encargo.microservicio.model.Usuario;
 import com.encargo.microservicio.service.AuthService;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
+import org.mockito.Mockito;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
-@WebMvcTest(AuthController.class)
 public class AuthControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
-
-    @MockBean
+    private AuthController authController;
     private AuthService authService;
-
-    @Autowired
-    private ObjectMapper objectMapper;
-
-    private Usuario usuarioValido;
 
     @BeforeEach
     void setUp() {
-        usuarioValido = new Usuario("testuser", "password123");
+        authService = Mockito.mock(AuthService.class);
+        authController = new AuthController(authService);
     }
 
     @Test
-    void registro_exitoso_devuelve201() throws Exception {
-        when(authService.registrar(any(Usuario.class))).thenReturn(true);
+    void login_conCredencialesValidas_retornaOkConToken() {
+        Usuario usuario = new Usuario("admin", "1234");
+        when(authService.autenticar(usuario)).thenReturn(true);
+        when(authService.generarToken(usuario)).thenReturn("token-admin-123");
 
-        mockMvc.perform(post("/api/auth/registro")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(usuarioValido)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.mensaje").value("Usuario registrado correctamente"));
+        ResponseEntity<String> response = authController.login(usuario);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("token-admin-123", response.getBody());
     }
 
     @Test
-    void registro_usuarioDuplicado_devuelve409() throws Exception {
-        when(authService.registrar(any(Usuario.class))).thenReturn(false);
+    void login_conCredencialesInvalidas_retornaUnauthorized() {
+        Usuario usuario = new Usuario("admin", "wrong");
+        when(authService.autenticar(usuario)).thenReturn(false);
 
-        mockMvc.perform(post("/api/auth/registro")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(usuarioValido)))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.mensaje").value("El usuario ya existe"));
+        ResponseEntity<String> response = authController.login(usuario);
+
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertEquals("Credenciales inválidas", response.getBody());
     }
 
     @Test
-    void registro_usernameVacio_devuelve400() throws Exception {
-        Usuario usuarioInvalido = new Usuario("", "password123");
+    void health_retornaOk() {
+        ResponseEntity<String> response = authController.health();
 
-        mockMvc.perform(post("/api/auth/registro")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(usuarioInvalido)))
-                .andExpect(status().isBadRequest());
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("OK", response.getBody());
     }
 
     @Test
-    void registro_passwordCorta_devuelve400() throws Exception {
-        Usuario usuarioInvalido = new Usuario("testuser", "abc");
+    void login_autenticarEsLlamado() {
+        Usuario usuario = new Usuario("admin", "1234");
+        when(authService.autenticar(usuario)).thenReturn(true);
+        when(authService.generarToken(usuario)).thenReturn("token-admin-123");
 
-        mockMvc.perform(post("/api/auth/registro")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(usuarioInvalido)))
-                .andExpect(status().isBadRequest());
-    }
+        authController.login(usuario);
 
-    @Test
-    void login_exitoso_devuelve200() throws Exception {
-        when(authService.login(any(Usuario.class))).thenReturn(true);
-
-        mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(usuarioValido)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.mensaje").value("Login exitoso"))
-                .andExpect(jsonPath("$.usuario").value("testuser"));
-    }
-
-    @Test
-    void login_credencialesInvalidas_devuelve401() throws Exception {
-        when(authService.login(any(Usuario.class))).thenReturn(false);
-
-        mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(usuarioValido)))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.mensaje").value("Credenciales invalidas"));
-    }
-
-    @Test
-    void health_devuelveEstadoUp() throws Exception {
-        mockMvc.perform(get("/api/auth/health"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.estado").value("UP"));
+        verify(authService, times(1)).autenticar(usuario);
     }
 }

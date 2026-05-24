@@ -17,52 +17,38 @@ public class AuthServiceTest {
     }
 
     @Test
-    void registrar_usuarioNuevo_retornaTrue() {
-        Usuario usuario = new Usuario("juan", "pass123");
-        assertTrue(authService.registrar(usuario));
+    void autenticar_conCredencialesValidas_retornaTrue() {
+        Usuario usuario = new Usuario("admin", "1234");
+        assertTrue(authService.autenticar(usuario));
     }
 
     @Test
-    void registrar_usuarioDuplicado_retornaFalse() {
-        Usuario usuario = new Usuario("juan", "pass123");
-        authService.registrar(usuario);
-        assertFalse(authService.registrar(usuario));
+    void autenticar_conUsernameVacio_retornaFalse() {
+        Usuario usuario = new Usuario("", "1234");
+        assertFalse(authService.autenticar(usuario));
     }
 
     @Test
-    void login_credencialesCorrectas_retornaTrue() {
-        Usuario usuario = new Usuario("juan", "pass123");
-        authService.registrar(usuario);
-        assertTrue(authService.login(usuario));
+    void autenticar_conPasswordVacio_retornaFalse() {
+        Usuario usuario = new Usuario("admin", "");
+        assertFalse(authService.autenticar(usuario));
     }
 
     @Test
-    void login_passwordIncorrecta_retornaFalse() {
-        authService.registrar(new Usuario("juan", "pass123"));
-        assertFalse(authService.login(new Usuario("juan", "wrongpass")));
+    void autenticar_conUsuarioNull_retornaFalse() {
+        assertFalse(authService.autenticar(null));
     }
 
     @Test
-    void login_usuarioInexistente_retornaFalse() {
-        assertFalse(authService.login(new Usuario("noexiste", "pass123")));
+    void generarToken_conUsuarioValido_retornaTokenNoNulo() {
+        Usuario usuario = new Usuario("admin", "1234");
+        String token = authService.generarToken(usuario);
+        assertNotNull(token);
+        assertTrue(token.startsWith("token-admin-"));
     }
 
     @Test
-    void existeUsuario_registrado_retornaTrue() {
-        authService.registrar(new Usuario("maria", "clave456"));
-        assertTrue(authService.existeUsuario("maria"));
-    }
-
-    @Test
-    void existeUsuario_noRegistrado_retornaFalse() {
-        assertFalse(authService.existeUsuario("fantasma"));
-    }
-
-    @Test
-    void cantidadUsuarios_refleja_totalCorrecto() {
-        assertEquals(0, authService.cantidadUsuarios());
-        authService.registrar(new Usuario("u1", "pass111"));
-        authService.registrar(new Usuario("u2", "pass222"));
-        assertEquals(2, authService.cantidadUsuarios());
+    void generarToken_conUsuarioNull_retornaNull() {
+        assertNull(authService.generarToken(null));
     }
 }

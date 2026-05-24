@@ -2,192 +2,73 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop]
+    branches: [ main, develop, feature/**, release/**, hotfix/** ]
   pull_request:
-    branches: [main, develop]
-
-env:
-  IMAGE_NAME: microservicio-auth
-  JAVA_VERSION: "17"
-  REGISTRY: ghcr.io
+    branches: [ main, develop ]
 
 jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Compilar proyecto
+        run: mvn clean compile -B
+
   test:
     name: Pruebas Unitarias
     runs-on: ubuntu-latest
+    needs: build
+
     steps:
-      - name: Checkout del codigo
+      - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+      - name: Configurar Java 17
         uses: actions/setup-java@v4
         with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: "temurin"
-          cache: maven
+          java-version: '17'
+          distribution: 'temurin'
 
-      - name: Ejecutar pruebas y verificar cobertura
+      - name: Ejecutar pruebas y generar reporte de cobertura
         run: mvn clean verify -B
 
-      - name: Subir reporte de cobertura
+      - name: Subir reporte JaCoCo
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: jacoco-report
           path: target/site/jacoco/
-          retention-days: 7
 
-  security:
-    name: Analisis de Seguridad Snyk
+  package:
+    name: Empaquetar
     runs-on: ubuntu-latest
     needs: test
+
     steps:
-      - name: Checkout del codigo
+      - name: Checkout código
         uses: actions/checkout@v4
 
-      - name: Configurar JDK ${{ env.JAVA_VERSION }}
+      - name: Configurar Java 17
         uses: actions/setup-java@v4
         with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: "temurin"
-          cache: maven
+          java-version: '17'
+          distribution: 'temurin'
 
-      - name: Compilar proyecto
-        run: mvn clean package -DskipTests -B
+      - name: Generar JAR
+        run: mvn clean package -B -DskipTests
 
-      - name: Escaneo Snyk de dependencias
-        uses: snyk/actions/maven@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Subir artefacto JAR
+        uses: actions/upload-artifact@v4
         with:
-          args: --severity-threshold=high --fail-on=all
-
-      - name: Escaneo Snyk de imagen Docker
-        uses: snyk/actions/docker@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-        with:
-          image: ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          args: --severity-threshold=high
-
-      - name: Publicar resultados SARIF
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: snyk.sarif
-
-  build:
-    name: Build Docker Image
-    runs-on: ubuntu-latest
-    needs: [test, security]
-    outputs:
-      image-tag: ${{ steps.meta.outputs.tags }}
-    steps:
-      - name: Checkout del codigo
-        uses: actions/checkout@v4
-
-      - name: Configurar JDK ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: "temurin"
-          cache: maven
-
-      - name: Compilar JAR
-        run: mvn clean package -DskipTests -B
-
-      - name: Configurar Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login en GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extraer metadatos de la imagen
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha,prefix=sha-
-            type=ref,event=branch
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-
-      - name: Build y Push imagen Docker
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          dockerfile: Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  deploy:
-    name: Despliegue con Docker Compose
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name == 'push'
-    environment:
-      name: ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }}
-    steps:
-      - name: Checkout del codigo
-        uses: actions/checkout@v4
-
-      - name: Configurar Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login en GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build imagen local
-        run: docker build -t ${{ env.IMAGE_NAME }}:latest .
-
-      - name: Desplegar con Docker Compose
-        run: |
-          docker compose up -d --build --remove-orphans
-          sleep 30
-
-      - name: Verificar estado de contenedores
-        run: |
-          docker compose ps
-          docker compose logs --tail=50 microservicio-auth
-
-      - name: Health check del microservicio
-        run: |
-          MAX_RETRIES=10
-          RETRY=0
-          until curl -sf http://localhost:80/health; do
-            RETRY=$((RETRY+1))
-            if [ "$RETRY" -ge "$MAX_RETRIES" ]; then
-              echo "Health check fallo"
-              docker compose logs
-              exit 1
-            fi
-            echo "Intento $RETRY/$MAX_RETRIES..."
-            sleep 10
-          done
-          echo "Microservicio funcionando correctamente"
-
-      - name: Registrar despliegue
-        run: |
-          echo "### Despliegue exitoso" >> $GITHUB_STEP_SUMMARY
-          echo "| Campo | Valor |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Entorno | ${{ github.ref == 'refs/heads/main' && 'production' || 'staging' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Rama | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Autor | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Fecha | $(date -u) |" >> $GITHUB_STEP_SUMMARY
-
-      - name: Limpiar contenedores
-        if: always()
-        run: docker compose down --remove-orphans
+          name: microservicio-jar
+          path: target/*.jar

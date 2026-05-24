@@ -3,32 +3,22 @@ package com.encargo.microservicio.service;
 import com.encargo.microservicio.model.Usuario;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.Map;
-
 @Service
 public class AuthService {
 
-    private final Map<String, String> usuarios = new HashMap<>();
-
-    public boolean registrar(Usuario usuario) {
-        if (usuarios.containsKey(usuario.getUsername())) {
+    public boolean autenticar(Usuario usuario) {
+        if (usuario == null || usuario.getUsername() == null || usuario.getPassword() == null) {
             return false;
         }
-        usuarios.put(usuario.getUsername(), usuario.getPassword());
-        return true;
+        // Lógica de autenticación básica
+        return !usuario.getUsername().isBlank() && !usuario.getPassword().isBlank();
     }
 
-    public boolean login(Usuario usuario) {
-        String passwordGuardada = usuarios.get(usuario.getUsername());
-        return passwordGuardada != null && passwordGuardada.equals(usuario.getPassword());
-    }
-
-    public boolean existeUsuario(String username) {
-        return usuarios.containsKey(username);
-    }
-
-    public int cantidadUsuarios() {
-        return usuarios.size();
+    public String generarToken(Usuario usuario) {
+        if (usuario == null || usuario.getUsername() == null) {
+            return null;
+        }
+        // Token simulado basado en username
+        return "token-" + usuario.getUsername() + "-" + System.currentTimeMillis();
     }
 }
