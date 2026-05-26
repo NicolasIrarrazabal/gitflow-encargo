@@ -1,29 +1,14 @@
-# ── Build ─────────────────────────────────────────────────────────────────────
-# Imagen con Maven + JDK 21 para compilar el proyecto
-FROM maven:3.9-eclipse-temurin-21-alpine AS build
+# ── Imagen base ───────────────────────────────────────────────────────────────
+# JDK 21 de Eclipse Temurin para compilar y ejecutar el proyecto
+FROM eclipse-temurin:21-jdk
 
 WORKDIR /app
 
-# Descargamos dependencias antes de copiar el fuente
-# (aprovecha la caché de Docker si pom.xml no cambia)
-COPY pom.xml .
-RUN mvn dependency:go-offline -q
+# Copiamos el JAR compilado por Maven al contenedor
+COPY target/*.jar auth-service.jar
 
-COPY src ./src
-RUN mvn clean package -DskipTests -q
-
-# ── Runtime ───────────────────────────────────────────────────────────────────
-# Solo JRE alpine: imagen final liviana, sin Maven ni código fuente
-FROM eclipse-temurin:21-jre-alpine
-
-WORKDIR /app
-
-# Usuario sin privilegios para no correr como root
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
-USER appuser
-
-COPY --from=build /app/target/*.jar auth-service.jar
-
+# Puerto en el que escucha el microservicio
 EXPOSE 8080
 
+# Comando de inicio del microservicio
 ENTRYPOINT ["java", "-jar", "auth-service.jar"]

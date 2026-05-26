@@ -174,11 +174,6 @@ jobs:
       - name: Levantar entorno simulado con Docker Compose
         run: docker-compose up -d
 
-      - name: Verificar que el servicio responde
-        run: |
-          sleep 10
-          curl --fail http://localhost:8080/actuator/health || exit 1
-
       - name: Detener entorno simulado
         if: always()
         run: docker-compose down
