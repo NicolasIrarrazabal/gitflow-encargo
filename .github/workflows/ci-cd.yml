@@ -7,9 +7,10 @@ on:
 
 jobs:
   # ==========================================
-  # 1. PRUEBAS Y ENTORNO SIMULADO
+  # 1. BUILD
   # ==========================================
-  build-and-test:
+  build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - name: Descargar el código
@@ -22,8 +23,35 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Ejecutar Pruebas de Maven
-        run: mvn clean verify
+      - name: Compilar proyecto
+        run: mvn clean package -DskipTests
+
+      - name: Guardar artefacto compilado
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: target/*.jar
+
+  # ==========================================
+  # 2. PRUEBAS UNITARIAS
+  # ==========================================
+  pruebas-unitarias:
+    name: Pruebas Unitarias
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Ejecutar pruebas unitarias
+        run: mvn test
 
       - name: Subir reporte JaCoCo
         uses: actions/upload-artifact@v4
@@ -33,10 +61,11 @@ jobs:
           path: target/site/jacoco/
 
   # ==========================================
-  # 2. ANÁLISIS DE CÓDIGO CON SONARCLOUD
+  # 3A. ANÁLISIS DE CALIDAD - SONARCLOUD  (paralelo)
   # ==========================================
   security-sonar:
-    needs: build-and-test
+    name: SonarCloud
+    needs: pruebas-unitarias
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,7 +78,7 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Escaneo de Calidad con SonarQube
+      - name: Escaneo de calidad con SonarCloud
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -62,10 +91,11 @@ jobs:
           -DskipTests
 
   # ==========================================
-  # 3. ESCANEO DE VULNERABILIDADES CON SNYK
+  # 3B. ANÁLISIS DE VULNERABILIDADES - SNYK  (paralelo)
   # ==========================================
   security-snyk:
-    needs: security-sonar
+    name: Snyk Security
+    needs: pruebas-unitarias
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -83,12 +113,12 @@ jobs:
       - name: Autenticar Snyk
         run: snyk auth ${{ secrets.SNYK_TOKEN }}
 
-      - name: Análisis de Dependencias con Snyk
-        run: snyk test --severity-threshold=high --json > snyk-report.json || true
+      - name: Análisis de dependencias (bloquea si falla)
+        run: snyk test --severity-threshold=high --json > snyk-report.json
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
-      - name: Guardar Reporte de Snyk como Artefacto
+      - name: Guardar reporte Snyk
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -96,11 +126,11 @@ jobs:
           path: snyk-report.json
 
   # ==========================================
-  # 4. ENTREGA CONTINUA A DOCKER HUB
+  # 4. BUILD DOCKER IMAGE
   # ==========================================
-  docker-publish:
-    needs: security-snyk
-    if: github.ref == 'refs/heads/main'
+  build-docker:
+    name: Build Docker Image
+    needs: [ security-sonar, security-snyk ]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -111,9 +141,44 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Construir y Subir Imagen Docker
+      - name: Construir y subir imagen Docker
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/microservicio-auth:latest
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/microservicio-auth:latest
+            ${{ secrets.DOCKER_USERNAME }}/microservicio-auth:${{ github.sha }}
+
+  # ==========================================
+  # 5. DESPLIEGUE SIMULADO
+  # ==========================================
+  despliegue-simulado:
+    name: Despliegue Simulado
+    needs: build-docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar Docker Compose
+        run: |
+          sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+
+      - name: Iniciar sesión en Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Levantar entorno simulado con Docker Compose
+        run: docker-compose up -d
+
+      - name: Verificar que el servicio responde
+        run: |
+          sleep 10
+          curl --fail http://localhost:8080/actuator/health || exit 1
+
+      - name: Detener entorno simulado
+        if: always()
+        run: docker-compose down
