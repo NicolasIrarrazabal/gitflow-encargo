@@ -65,7 +65,7 @@ jobs:
   # 3. ESCANEO DE VULNERABILIDADES CON SNYK
   # ==========================================
   security-snyk:
-    needs: build-and-test
+    needs: security-sonar
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -75,20 +75,21 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          args: --severity-threshold=high --json-file-output=snyk-report.json
+          args: --severity-threshold=high
+          json: true
 
       - name: Guardar Reporte de Snyk como Artefacto
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: snyk-security-report
-          path: snyk-report.json
+          path: snyk.json
 
   # ==========================================
   # 4. ENTREGA CONTINUA A DOCKER HUB
   # ==========================================
   docker-publish:
-    needs: [security-sonar, security-snyk]
+    needs: security-snyk
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
