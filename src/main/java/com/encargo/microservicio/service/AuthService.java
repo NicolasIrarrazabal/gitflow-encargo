@@ -6,12 +6,16 @@ import org.springframework.stereotype.Service;
 @Service
 public class AuthService {
 
+    // Usuario hardcodeado para fines de demostracion y comprobacion.
+    // En un entorno real las credenciales se validarian con una base de datos.
+    private static final String USUARIO = "admin";
+    private static final String PASSWORD = "1234";
+
     public boolean autenticar(Usuario usuario) {
         if (usuario == null || usuario.getUsername() == null || usuario.getPassword() == null) {
             return false;
         }
-        // Lógica de autenticación básica
-        return !usuario.getUsername().isBlank() && !usuario.getPassword().isBlank();
+        return usuario.getUsername().equals(USUARIO) && usuario.getPassword().equals(PASSWORD);
     }
 
     public String generarToken(Usuario usuario) {

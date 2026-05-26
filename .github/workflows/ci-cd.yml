@@ -1,42 +1,29 @@
-name: CI/CD Pipeline
+name: CI/CD Pipeline - Auth Microservice
 
+# Se ejecuta SOLO al hacer Push (merge) hacia la rama 'main'
 on:
   push:
-    branches: [ main, develop, feature/**, release/**, hotfix/** ]
-  pull_request:
-    branches: [ main, develop ]
+    branches: [ "main" ]
 
 jobs:
-  build:
-    name: Build
+  # ==========================================
+  # 1. PRUEBAS Y ENTORNO SIMULADO
+  # ==========================================
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Descargar el código
+        uses: actions/checkout@v4
 
       - name: Configurar Java 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
+          cache: maven
 
-      - name: Compilar
-        run: mvn clean compile -B
-
-  test:
-    name: Pruebas Unitarias
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configurar Java 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-
-      - name: Ejecutar tests y verificar cobertura
-        run: mvn clean verify -B
+      - name: Ejecutar Pruebas de Maven
+        run: mvn clean verify
 
       - name: Subir reporte JaCoCo
         uses: actions/upload-artifact@v4
@@ -45,12 +32,16 @@ jobs:
           name: jacoco-report
           path: target/site/jacoco/
 
-  security:
-    name: Analisis de Seguridad
+  # ==========================================
+  # 2. ANÁLISIS DE CÓDIGO CON SONARCLOUD
+  # ==========================================
+  security-sonar:
+    needs: build-and-test
     runs-on: ubuntu-latest
-    needs: test
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Configurar Java 21
         uses: actions/setup-java@v4
@@ -58,86 +49,60 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Instalar Snyk CLI
-        run: npm install -g snyk
+      - name: Escaneo de Calidad con SonarQube
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: >
+          mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+          -Dsonar.projectKey=${{ secrets.PROJECT_KEY_SONAR }}
+          -Dsonar.organization=${{ secrets.ORGANIZATION_SONAR }}
+          -Dsonar.host.url=https://sonarcloud.io
+          -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+          -DskipTests
 
-      - name: Autenticar Snyk
-        run: snyk auth ${{ secrets.SNYK_TOKEN }}
+  # ==========================================
+  # 3. ESCANEO DE VULNERABILIDADES CON SNYK
+  # ==========================================
+  security-snyk:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Escaneo de dependencias (bloquea si hay vulns altas)
-        run: snyk test --severity-threshold=high --json > snyk-report.json
+      - name: Análisis de Dependencias con Snyk
+        uses: snyk/actions/maven@master
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --json-file-output=snyk-report.json
 
-      - name: Mostrar resumen de vulnerabilidades
-        if: always()
-        run: snyk test --severity-threshold=high
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      - name: Subir reporte Snyk
+      - name: Guardar Reporte de Snyk como Artefacto
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: snyk-report
+          name: snyk-security-report
           path: snyk-report.json
 
-  docker:
-    name: Build Docker Image
+  # ==========================================
+  # 4. ENTREGA CONTINUA A DOCKER HUB
+  # ==========================================
+  docker-publish:
+    needs: [security-sonar, security-snyk]
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    needs: security
     steps:
       - uses: actions/checkout@v4
 
-      - name: Construir imagen Docker
-        run: docker build -t microservicio-auth:${{ github.sha }} .
-
-      - name: Guardar imagen
-        run: docker save microservicio-auth:${{ github.sha }} | gzip > imagen-docker.tar.gz
-
-      - name: Subir imagen como artefacto
-        uses: actions/upload-artifact@v4
+      - name: Iniciar sesión en Docker Hub
+        uses: docker/login-action@v3
         with:
-          name: docker-image
-          path: imagen-docker.tar.gz
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-  deploy:
-    name: Despliegue Simulado
-    runs-on: ubuntu-latest
-    needs: docker
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Descargar imagen Docker
-        uses: actions/download-artifact@v4
+      - name: Construir y Subir Imagen Docker
+        uses: docker/build-push-action@v5
         with:
-          name: docker-image
-
-      - name: Cargar imagen Docker
-        run: docker load < imagen-docker.tar.gz
-
-      - name: Etiquetar imagen
-        run: docker tag microservicio-auth:${{ github.sha }} microservicio-auth:latest
-
-      - name: Levantar con Docker Compose (2 réplicas)
-        run: docker compose up -d --scale microservicio-auth=2
-
-      - name: Esperar que inicie
-        run: sleep 45
-
-      - name: Verificar réplicas activas
-        run: |
-          COUNT=$(docker compose ps --status running | grep microservicio-auth | wc -l)
-          echo "Réplicas activas: $COUNT"
-          [ "$COUNT" -ge 2 ] || (echo "ERROR: se esperaban 2 réplicas" && exit 1)
-
-      - name: Verificar que nginx responde
-        run: curl --fail --retry 5 --retry-delay 5 http://localhost:80/auth/health
-
-      - name: Ver logs del contenedor
-        if: always()
-        run: docker compose logs
-
-      - name: Apagar contenedores
-        if: always()
-        run: docker compose down
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/microservicio-auth:latest
