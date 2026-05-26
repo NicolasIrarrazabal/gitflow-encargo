@@ -113,8 +113,8 @@ jobs:
       - name: Autenticar Snyk
         run: snyk auth ${{ secrets.SNYK_TOKEN }}
 
-      - name: Analisis de dependencias con Snyk
-        run: snyk test --severity-threshold=high --json > snyk-report.json || true
+      - name: Análisis de dependencias (bloquea si falla)
+        run: snyk test --severity-threshold=high --json > snyk-report.json
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
