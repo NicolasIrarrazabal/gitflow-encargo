@@ -167,7 +167,7 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Levantar entorno simulado con Docker Compose
-        run: docker-compose up -d
+        run: docker compose up -d
 
       - name: Verificar que el servicio responde
         run: |
@@ -176,4 +176,4 @@ jobs:
 
       - name: Detener entorno simulado
         if: always()
-        run: docker-compose down
+        run: docker compose down
