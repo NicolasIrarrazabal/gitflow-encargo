@@ -265,7 +265,9 @@ mvn test jacoco:report
 
 Durante el desarrollo de esta evaluación trabajé de forma individual, así que tuve que hacerme cargo de todo el proceso, desde armar el pipeline hasta configurar cada herramienta que se integraba. Fue complicado en varios momentos, pero también me sirvió para entender mejor cómo funciona realmente un ciclo CI/CD completo.
 
-Lo que más me costó fue integrar SonarCloud y Snyk en paralelo dentro del pipeline. Al principio no entendía bien cómo manejar que ambos jobs corrieran al mismo tiempo pero que el job siguiente los esperara a los dos. También tuve que aprender a leer los errores de Quality Gate de SonarCloud, que al comienzo me bloqueaban el pipeline sin que yo entendiera bien por qué. Una vez que lo resolví, entendí que ese bloqueo no es un problema sino exactamente el punto: que el código no avance si tiene problemas reales.
+De las partes que mes me costaron fue aprender a leer los errores de Quality Gate de SonarCloud, que al comienzo me daba error el pipeline sin que yo entendiera bien por qué. Una vez que lo resolví, entendí que ese error no es un problema sino exactamente el objetivo, si hay problemas reales que se identifiquen y se corrijan.
+
+También me costó bastante verificar que los secrets estuvieran funcionando correctamente. No era fácil saber si realmente se estaban usando o si el pipeline simplemente estaba fallando en silencio. Tuve que aprender a leer los logs de GitHub Actions y reconocer que los *** en el output confirmaban que el secret había sido inyectado correctamente, lo que me dio más confianza en que el pipeline estaba operando de forma segura.
 
 Este proyecto me hizo cambiar la forma en que veo el desarrollo de software. Antes pensaba que entregar un proyecto era simplemente hacer que el código funcionara. Ahora entiendo que también incluye automatización, pruebas, seguridad, contenedores y poder seguir todo el proceso desde el desarrollo hasta el despliegue. Es probablemente una de las cosas más útiles que aprendí durante estas semanas.
 
