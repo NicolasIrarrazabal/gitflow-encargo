@@ -4,6 +4,9 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
+    <!-- ============================================================ -->
+    <!-- Proyecto base: Spring Boot 3.4.3                             -->
+    <!-- ============================================================ -->
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
@@ -15,57 +18,67 @@
     <artifactId>microservicio</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>microservicio-auth</name>
-    <description>Microservicio de autenticación</description>
+    <description>Microservicio de autenticación — Evaluación Parcial N°2 DOY0101</description>
 
     <properties>
         <java.version>21</java.version>
         <tomcat.version>10.1.36</tomcat.version>
     </properties>
 
+    <!-- ============================================================ -->
+    <!-- Dependencias                                                  -->
+    <!-- ============================================================ -->
     <dependencies>
-        <!-- Spring Boot Web -->
+
+        <!-- API REST -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
-        <!-- Actuator: endpoints de salud y métricas (/actuator/health) -->
+        <!-- Endpoints de salud y métricas (/actuator/health) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
-        <!-- Validation: anotaciones @NotBlank, @NotNull en modelos -->
+        <!-- Validación de modelos (@NotBlank, @NotNull, etc.) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
-        <!-- Lombok: elimina getters/setters/constructores boilerplate -->
+        <!-- Lombok: elimina código boilerplate (getters, setters, constructores) -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
 
-        <!-- Spring Boot Test -->
+        <!-- Testing: JUnit + AssertJ incluidos por Spring Boot Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
 
-        <!-- Mockito: mocks para pruebas unitarias -->
+        <!-- Mockito: mocks e inyección de dependencias en pruebas unitarias -->
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
             <scope>test</scope>
         </dependency>
+
     </dependencies>
 
+    <!-- ============================================================ -->
+    <!-- Build y Plugins                                               -->
+    <!-- ============================================================ -->
     <build>
         <plugins>
-            <!-- Spring Boot Maven Plugin -->
+
+            <!-- Spring Boot Maven Plugin: empaqueta el JAR ejecutable -->
+            <!-- Excluye Lombok del artefacto final (solo se necesita en compilación) -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
@@ -79,20 +92,24 @@
                 </configuration>
             </plugin>
 
-            <!-- JaCoCo: cobertura de código con umbral mínimo del 70% -->
+            <!-- JaCoCo: cobertura de código -->
+            <!-- Umbral mínimo: 70% líneas / 60% ramas -->
+            <!-- El build falla si no se alcanza el umbral -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>0.8.12</version>
                 <executions>
-                    <!-- Instrumentación antes de los tests -->
+
+                    <!-- 1. Instrumenta el agente antes de correr los tests -->
                     <execution>
                         <id>prepare-agent</id>
                         <goals>
                             <goal>prepare-agent</goal>
                         </goals>
                     </execution>
-                    <!-- Generar reporte HTML en target/site/jacoco -->
+
+                    <!-- 2. Genera reporte HTML en target/site/jacoco/index.html -->
                     <execution>
                         <id>report</id>
                         <phase>verify</phase>
@@ -100,7 +117,8 @@
                             <goal>report</goal>
                         </goals>
                     </execution>
-                    <!-- Bloquear build si la cobertura cae por debajo del umbral -->
+
+                    <!-- 3. Bloquea el build si la cobertura cae bajo el umbral -->
                     <execution>
                         <id>check-coverage</id>
                         <phase>verify</phase>
@@ -112,11 +130,13 @@
                                 <rule>
                                     <element>BUNDLE</element>
                                     <limits>
+                                        <!-- Mínimo 70% de líneas cubiertas -->
                                         <limit>
                                             <counter>LINE</counter>
                                             <value>COVEREDRATIO</value>
                                             <minimum>0.70</minimum>
                                         </limit>
+                                        <!-- Mínimo 60% de ramas cubiertas -->
                                         <limit>
                                             <counter>BRANCH</counter>
                                             <value>COVEREDRATIO</value>
@@ -127,8 +147,11 @@
                             </rules>
                         </configuration>
                     </execution>
+
                 </executions>
             </plugin>
+
         </plugins>
     </build>
+
 </project>
