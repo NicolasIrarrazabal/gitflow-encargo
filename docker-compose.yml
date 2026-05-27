@@ -1,23 +1,24 @@
 version: '3.8'
 
 services:
-  # ==========================================
-  # Contenedor del Microservicio Auth
-  # ==========================================
+
   microservicio-auth:
     build: .
     container_name: auth_api
-    restart: always
+    restart: always                      # Se relanza automaticamente ante caidas
     ports:
-      - "8080:8080"
+      - "8080:8080"                      # HOST:CONTENEDOR
+
+    # Variables inyectadas desde el entorno del host
     environment:
-      # Variables de entorno inyectadas desde el sistema (sin archivo .env por seguridad)
       SPRING_APPLICATION_NAME: microservicio-auth
       SERVER_PORT: 8080
+
     healthcheck:
-      # Verifica que el servicio esté listo antes de declararlo disponible
+      # Verifica disponibilidad cada 10s antes de declarar el contenedor como healthy
+      # Si falla 5 veces consecutivas → estado unhealthy
       test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8080/auth/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 30s                  # Tiempo de gracia al arrancar Spring Boot
