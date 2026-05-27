@@ -1,42 +1,56 @@
-name: CI/CD Pipeline
+name: CI/CD Pipeline - Auth Microservice
 
 on:
   push:
-    branches: [ main, develop, feature/**, release/**, hotfix/** ]
+    branches: ["main"]
   pull_request:
-    branches: [ main, develop ]
+    branches: ["main"]
 
 jobs:
+  # ── 1. BUILD ──────────────────────────────────────────────────────────────
   build:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Descargar el código
+        uses: actions/checkout@v4
 
       - name: Configurar Java 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
+          cache: maven
 
-      - name: Compilar
-        run: mvn clean compile -B
+      - name: Compilar proyecto
+        run: mvn clean package -DskipTests
 
-  test:
+      - name: Guardar artefacto compilado
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: target/*.jar
+
+  # ── 2. PRUEBAS UNITARIAS + COBERTURA ──────────────────────────────────────
+  pruebas-unitarias:
     name: Pruebas Unitarias
-    runs-on: ubuntu-latest
     needs: build
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Descargar el código
+        uses: actions/checkout@v4
 
       - name: Configurar Java 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
+          cache: maven
 
-      - name: Ejecutar tests y verificar cobertura
-        run: mvn clean verify -B
+      # Usamos "verify" y no "test" para que JaCoCo valide los umbrales
+      # (70% de líneas y 60% de ramas). Si no se cumple, el build falla aquí.
+      - name: Ejecutar pruebas unitarias y verificar cobertura
+        run: mvn verify
 
       - name: Subir reporte JaCoCo
         uses: actions/upload-artifact@v4
@@ -45,10 +59,40 @@ jobs:
           name: jacoco-report
           path: target/site/jacoco/
 
-  security:
-    name: Analisis de Seguridad
+  # ── 3A. CALIDAD CON SONARCLOUD  (corre en paralelo con Snyk) ──────────────
+  security-sonar:
+    name: SonarCloud
+    needs: pruebas-unitarias
     runs-on: ubuntu-latest
-    needs: test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Escaneo de calidad con SonarCloud
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: >
+          mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+          -Dsonar.projectKey=${{ secrets.PROJECT_KEY_SONAR }}
+          -Dsonar.organization=${{ secrets.ORGANIZATION_SONAR }}
+          -Dsonar.host.url=https://sonarcloud.io
+          -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+          -Dsonar.qualitygate.wait=true
+          -DskipTests
+
+  # ── 3B. VULNERABILIDADES CON SNYK  (corre en paralelo con SonarCloud) ─────
+  security-snyk:
+    name: Snyk Security
+    needs: pruebas-unitarias
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -57,6 +101,7 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
+          cache: maven
 
       - name: Instalar Snyk CLI
         run: npm install -g snyk
@@ -64,80 +109,83 @@ jobs:
       - name: Autenticar Snyk
         run: snyk auth ${{ secrets.SNYK_TOKEN }}
 
-      - name: Escaneo de dependencias (bloquea si hay vulns altas)
+      - name: Análisis de dependencias (bloquea si hay vulns HIGH/CRITICAL)
         run: snyk test --severity-threshold=high --json > snyk-report.json
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
-      - name: Mostrar resumen de vulnerabilidades
-        if: always()
-        run: snyk test --severity-threshold=high
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-
-      - name: Subir reporte Snyk
+      - name: Guardar reporte Snyk
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: snyk-report
+          name: snyk-security-report
           path: snyk-report.json
 
-  docker:
+  # ── 4. BUILD Y PUSH DE IMAGEN DOCKER ──────────────────────────────────────
+  build-docker:
     name: Build Docker Image
+    needs: [security-sonar, security-snyk]
+    # Solo publicamos en push directo a main; los PRs no deben tocar Docker Hub
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    needs: security
     steps:
       - uses: actions/checkout@v4
 
-      - name: Construir imagen Docker
-        run: docker build -t microservicio-auth:${{ github.sha }} .
-
-      - name: Guardar imagen
-        run: docker save microservicio-auth:${{ github.sha }} | gzip > imagen-docker.tar.gz
-
-      - name: Subir imagen como artefacto
-        uses: actions/upload-artifact@v4
+      - name: Iniciar sesión en Docker Hub
+        uses: docker/login-action@v3
         with:
-          name: docker-image
-          path: imagen-docker.tar.gz
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-  deploy:
+      - name: Construir y subir imagen Docker
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/microservicio-auth:latest
+            ${{ secrets.DOCKER_USERNAME }}/microservicio-auth:${{ github.sha }}
+
+  # ── 5. DESPLIEGUE SIMULADO ─────────────────────────────────────────────────
+  despliegue-simulado:
     name: Despliegue Simulado
+    needs: build-docker
     runs-on: ubuntu-latest
-    needs: docker
     steps:
       - uses: actions/checkout@v4
 
-      - name: Descargar imagen Docker
-        uses: actions/download-artifact@v4
+      - name: Iniciar sesión en Docker Hub
+        uses: docker/login-action@v3
         with:
-          name: docker-image
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Cargar imagen Docker
-        run: docker load < imagen-docker.tar.gz
+      - name: Levantar entorno simulado con Docker Compose
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: docker compose up -d
 
-      - name: Etiquetar imagen
-        run: docker tag microservicio-auth:${{ github.sha }} microservicio-auth:latest
-
-      - name: Levantar con Docker Compose (2 réplicas)
-        run: docker compose up -d --scale microservicio-auth=2
-
-      - name: Esperar que inicie
-        run: sleep 45
-
-      - name: Verificar réplicas activas
+      - name: Esperar que el servicio esté disponible (con reintentos)
         run: |
-          COUNT=$(docker compose ps --status running | grep microservicio-auth | wc -l)
-          echo "Réplicas activas: $COUNT"
-          [ "$COUNT" -ge 2 ] || (echo "ERROR: se esperaban 2 réplicas" && exit 1)
+          for i in {1..12}; do
+            curl -sf http://localhost:80/auth/health && echo "Servicio OK" && exit 0
+            echo "Intento $i/12 — esperando 5s..."
+            sleep 5
+          done
+          echo "ERROR: el servicio no respondió tras 60s"
+          docker compose logs
+          exit 1
 
-      - name: Verificar que nginx responde
-        run: curl --fail --retry 5 --retry-delay 5 http://localhost:80/auth/health
+      - name: Verificar endpoint de autenticación
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST http://localhost:80/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"username":"admin","password":"1234"}')
+          echo "HTTP status: $STATUS"
+          [ "$STATUS" = "200" ] || exit 1
 
-      - name: Ver logs del contenedor
-        if: always()
-        run: docker compose logs
-
-      - name: Apagar contenedores
+      - name: Detener entorno simulado
         if: always()
         run: docker compose down

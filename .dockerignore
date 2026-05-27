@@ -1,0 +1,10 @@
+.git
+.github
+target/
+*.md
+.mvn/
+mvnw
+mvnw.cmd
+*.cmd
+docker-compose.yml
+nginx.conf
