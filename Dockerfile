@@ -14,7 +14,7 @@ RUN mvn clean package -DskipTests -q
 
 # ── Etapa 2: Imagen final liviana ─────────────────────────────────────────────
 # Solo el JRE, nada de Maven ni fuentes (~200 MB vs ~700 MB de la imagen Maven)
-FROM eclipse-temurin:21-jre-jammy
+FROM eclipse-temurin:25-jre-jammy
 
 WORKDIR /app
 
