@@ -108,7 +108,7 @@ jobs:
           cache: maven
 
       - name: Instalar Snyk CLI
-        run: npm install -g snyk
+        run: npm install -g snyk@1.1297.1 --ignore-scripts
 
       - name: Autenticar Snyk
         run: snyk auth "$SNYK_TOKEN"
