@@ -1,0 +1,157 @@
+{
+  "annotations": {"list": []},
+  "description": "Métricas del pipeline CI/CD: tiempo de despliegue, cobertura de pruebas, resultado de security scans. Requerido por Evaluación Parcial N°3 (IE3).",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": "Prometheus",
+      "description": "Tiempo total del pipeline por ejecución (segundos)",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisLabel": "Segundos",
+            "drawStyle": "bars",
+            "fillOpacity": 50,
+            "lineWidth": 1,
+            "pointSize": 5
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "options": {
+        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "single"}
+      },
+      "targets": [
+        {
+          "expr": "cicd_pipeline_duration_seconds",
+          "legendFormat": "{{run_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Duración del Pipeline CI/CD (s)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "description": "Cobertura de tests JaCoCo por ejecución del pipeline",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "orange", "value": 60},
+              {"color": "yellow", "value": 70},
+              {"color": "green", "value": 80}
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "cicd_test_coverage_percent",
+          "legendFormat": "coverage %",
+          "refId": "A"
+        }
+      ],
+      "title": "Cobertura de Tests JaCoCo (%)",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "description": "Estado de cada job del pipeline por ejecución (1=success, 0=failure)",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+      "id": 3,
+      "options": {
+        "legend": {"displayMode": "table", "placement": "right", "showLegend": true},
+        "tooltip": {"mode": "single"}
+      },
+      "targets": [
+        {
+          "expr": "cicd_job_status",
+          "legendFormat": "{{job_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Estado de Jobs del Pipeline",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "description": "Conteo de vulnerabilidades detectadas por severidad",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"drawStyle": "bars", "fillOpacity": 50, "lineWidth": 1},
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+      "id": 4,
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "single"}
+      },
+      "targets": [
+        {
+          "expr": "cicd_security_vulnerabilities_total",
+          "legendFormat": "{{severity}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Vulnerabilidades Detectadas por Severidad",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["cicd", "pipeline", "devops"],
+  "templating": {"list": []},
+  "time": {"from": "now-7d", "to": "now"},
+  "timepicker": {},
+  "timezone": "",
+  "title": "CI/CD Pipeline Metrics (EP3 IE3)",
+  "uid": "cicd-pipeline-metrics",
+  "version": 1,
+  "weekStart": ""
+}
