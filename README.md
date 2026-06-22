@@ -1,7 +1,9 @@
-# 🚀 Microservicio Auth — Pipeline CI/CD
+# 🚀 Microservicio Auth — Pipeline DevOps con Observabilidad
 
-> **Evaluación Parcial N°2 · DOY0101 Ingeniería DevOps**  
-> Automatización completa del ciclo de vida de un microservicio mediante GitHub Actions, Docker y Docker Compose.
+> **Evaluación Parcial N°3 · DOY0101 Ingeniería DevOps**
+> *Observabilidad y entornos reales en DevOps*
+> Extensión del pipeline CI/CD con monitoreo, métricas, dashboards,
+> Kubernetes y políticas de cumplimiento automatizadas.
 
 ---
 
@@ -11,11 +13,12 @@
 - [Tecnologías Utilizadas](#tecnologías-utilizadas)
 - [Estructura del Repositorio](#estructura-del-repositorio)
 - [Arquitectura del Pipeline CI/CD](#arquitectura-del-pipeline-cicd)
-- [Contenedorización (IE1)](#contenedorización-ie1)
-- [Pruebas Automatizadas (IE2)](#pruebas-automatizadas-ie2)
-- [Seguridad y Calidad de Código (IE3)](#seguridad-y-calidad-de-código-ie3)
-- [Despliegue Automatizado (IE4)](#despliegue-automatizado-ie4)
-- [Orquestación de Contenedores (IE5)](#orquestación-de-contenedores-ie5)
+- [IE1 — Monitoreo con CloudWatch + Prometheus](#ie1--monitoreo-con-cloudwatch--prometheus)
+- [IE2 — Despliegue en Kubernetes (kind)](#ie2--despliegue-en-kubernetes-kind)
+- [IE3 — Dashboards con Grafana](#ie3--dashboards-con-grafana)
+- [IE4 — Documentación de Integración](#ie4--documentación-de-integración)
+- [IE5 — Políticas de Cumplimiento](#ie5--políticas-de-cumplimiento)
+- [IE6 — Validación e Interrupción del Pipeline](#ie6--validación-e-interrupción-del-pipeline)
 - [Trazabilidad y Calidad](#trazabilidad-y-calidad)
 - [Secrets Requeridos](#secrets-requeridos)
 - [Ejecución Local](#ejecución-local)
@@ -26,30 +29,64 @@
 
 ## Descripción del Proyecto
 
-Este repositorio implementa un pipeline de **Integración y Entrega Continua (CI/CD)** para el microservicio de autenticación (`microservicio-auth`) desarrollado en la evaluación anterior. El objetivo es automatizar completamente el ciclo de vida del servicio: desde la compilación y pruebas hasta el análisis de seguridad, la construcción de imagen Docker y el despliegue en un entorno simulado.
+Este repositorio implementa un pipeline **DevOps completo** para el
+microservicio de autenticación (`microservicio-auth`), incluyendo:
 
-El pipeline se ejecuta en **GitHub Actions** y cubre las siguientes etapas en orden:
+1. **CI/CD clásico** (Evaluación Parcial N°2): build, tests, análisis de
+   seguridad, contenedorización y despliegue con Docker Compose.
+2. **Observabilidad** (Evaluación Parcial N°3 — IE1): instrumentación con
+   Micrometer, exportación a Prometheus y AWS CloudWatch, logs JSON
+   estructurados.
+3. **Despliegue orquestado** (IE2): manifiestos Kubernetes + cluster local
+   con `kind` ejecutándose dentro del pipeline.
+4. **Dashboards** (IE3): Grafana con métricas de tiempo de despliegue,
+   cobertura, CPU/memoria y errores.
+5. **Cumplimiento** (IE5): SonarCloud, Snyk, CODEOWNERS, branch protection
+   rules y script de auditoría automatizado.
+6. **Validación robusta** (IE6): gate final que detiene el pipeline ante
+   cualquier falla crítica, con demo de inyección de fallas.
+
+El pipeline corre en **GitHub Actions** y ejecuta los siguientes jobs
+en secuencia:
 
 ```
-Build → Pruebas Unitarias → Seguridad (SonarCloud + Snyk) → Build Docker → Despliegue Simulado
+build → tests → ┬─ sonar ─┐
+                ├─ snyk  ─┤
+                └─ audit ─┘
+                       ↓
+                 validation-gate (IE6)
+                       ↓
+            ┌──────────┴──────────┐
+            ↓                     ↓
+     build-docker          publish-metrics
+            ↓                     ↓
+   ┌────────┴────────┐
+   ↓                 ↓
+despliegue       deploy-k8s (kind)
+simulado
+(Compose)
 ```
 
 ---
 
 ## Tecnologías Utilizadas
 
-| Categoría | Herramienta | Versión |
-|---|---|---|
-| Lenguaje | Java | 21 (Temurin) |
-| Build | Maven | 3.9.x |
-| Framework | Spring Boot | — |
-| Contenedor | Docker | Alpine |
-| Orquestación | Docker Compose | 3.8 |
-| CI/CD | GitHub Actions | — |
-| Calidad | SonarCloud | — |
-| Seguridad | Snyk | — |
-| Dependencias | Dependabot | — |
-| Cobertura | JaCoCo | — |
+| Categoría | Herramienta | Versión | Indicador |
+|---|---|---|---|
+| Lenguaje | Java | 21 (Temurin) | — |
+| Build | Maven | 3.9.x | — |
+| Framework | Spring Boot | 3.4.3 | — |
+| Contenedor | Docker | multi-stage | IE2 |
+| Orquestación local | Docker Compose | 3.8 | IE2 |
+| Orquestación K8s | kind | 0.23.0 | **IE2** |
+| CI/CD | GitHub Actions | — | IE6 |
+| Calidad de código | SonarCloud + JaCoCo | — | IE5 |
+| Seguridad deps | Snyk | 1.1297.1 | IE5 |
+| **Observabilidad** | **Micrometer + Prometheus + CloudWatch** | — | **IE1** |
+| **Visualización** | **Grafana + Loki** | 10.4.0 | **IE3** |
+| **Auditoría** | **script bash + CODEOWNERS** | — | **IE5** |
+| Dependencias | Dependabot | — | IE5 |
+| Cobertura | JaCoCo | 0.8.12 | IE3 + IE5 |
 
 ---
 
@@ -58,18 +95,45 @@ Build → Pruebas Unitarias → Seguridad (SonarCloud + Snyk) → Build Docker �
 ```
 gitflow-encargo/
 ├── .github/
+│   ├── CODEOWNERS                          # IE5 — revisores automáticos
+│   ├── BRANCH_PROTECTION.md                # IE5 — doc de reglas
 │   └── workflows/
-│       ├── ci-cd.yml          # Pipeline principal CI/CD (rama main)
-│       └── cy.yml             # Pipeline básico de validación (develop/main)
-├── .mvn/
-│   └── wrapper/
-│       └── maven-wrapper.properties
+│       ├── ci-cd.yml                       # Pipeline principal (todos los IE)
+│       ├── failure-injection.yml           # IE6 — demo de inyección de fallas
+│       └── cy.yml                          # Pipeline básico
+├── k8s/                                    # IE2 — manifiestos Kubernetes
+│   ├── namespace.yaml
+│   ├── configmap.yaml
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   └── kustomization.yaml
+├── observability/                          # IE1 + IE3 — stack de observabilidad
+│   ├── prometheus/
+│   │   ├── prometheus.yml
+│   │   └── alerts.yml
+│   └── grafana/
+│       ├── datasources/prometheus.yml
+│       └── dashboards/
+│           ├── dashboard-auth-microservice.json
+│           ├── dashboard-cicd-metrics.json
+│           └── provider.yml
+├── scripts/                                # IE5 — scripts de auditoría
+│   ├── audit-compliance.sh
+│   └── inject-failure.sh
 ├── src/
-│   ├── main/java/...          # Código fuente del microservicio
-│   └── test/java/...          # Pruebas unitarias (JUnit)
-├── Dockerfile                 # Imagen multi-stage del microservicio
-├── docker-compose.yml         # Orquestación local del servicio
-├── pom.xml                    # Dependencias y configuración Maven
+│   ├── main/java/com/encargo/microservicio/
+│   │   ├── MicroservicioApplication.java
+│   │   ├── config/MetricsConfig.java       # IE1 — métricas custom
+│   │   ├── controller/AuthController.java  # IE1 — instrumentado
+│   │   ├── model/Usuario.java
+│   │   └── service/AuthService.java
+│   ├── main/resources/
+│   │   ├── application.properties          # IE1 — expone endpoints
+│   │   └── logback-spring.xml              # IE1 — logs JSON
+│   └── test/java/com/encargo/microservicio/
+├── Dockerfile                              # multi-stage + healthcheck
+├── docker-compose.yml                      # microservicio + prometheus + grafana
+├── pom.xml                                 # Spring Boot + Micrometer + CloudWatch
 └── README.md
 ```
 
@@ -77,212 +141,471 @@ gitflow-encargo/
 
 ## Arquitectura del Pipeline CI/CD
 
-El pipeline principal (`ci-cd.yml`) se activa únicamente con **push a la rama `main`** y ejecuta los siguientes jobs en secuencia:
+Para una vista detallada con diagramas, consultar
+[`docs/architecture.md`](docs/architecture.md).
 
+```mermaid
+flowchart TB
+    A[Build Maven] --> B[Pruebas Unitarias + JaCoCo]
+    B --> C{SonarCloud}
+    B --> D{Snyk}
+    B --> E{Compliance Audit}
+    C --> F[Validation Gate]
+    D --> F
+    E --> F
+    F -->|PASS| G[Build Docker]
+    F -.->|FAIL| H[⛔ STOP]
+    G --> I[Despliegue Compose]
+    G --> J[Deploy Kubernetes kind]
+    G --> K[Publish Pipeline Metrics]
 ```
-┌─────────┐     ┌──────────────────┐     ┌──────────────┬──────────────┐
-│  Build  │────▶│ Pruebas Unitarias│────▶│  SonarCloud  │  Snyk Scan   │
-└─────────┘     └──────────────────┘     └──────┬───────┴──────┬───────┘
-                                                 │              │
-                                          ┌──────▼──────────────▼──────┐
-                                          │      Build Docker Image     │
-                                          └─────────────┬───────────────┘
-                                                        │
-                                          ┌─────────────▼───────────────┐
-                                          │     Despliegue Simulado      │
-                                          └─────────────────────────────┘
-```
-
-Los jobs de **SonarCloud** y **Snyk** corren en **paralelo** para optimizar el tiempo total del pipeline.
 
 ---
 
-## Contenedorización (IE1)
+## IE1 — Monitoreo con CloudWatch + Prometheus
 
-El `Dockerfile` utiliza una estrategia **multi-stage build** para mantener la imagen final liviana y segura:
+### Configuración
 
-**Etapa 1 — Build:** usa `maven:3.9-eclipse-temurin-21-alpine` para compilar el proyecto y descargar dependencias. Se aprovecha el caché de capas de Docker copiando primero el `pom.xml` antes que el código fuente, lo que acelera compilaciones sucesivas cuando sólo cambia el código.
+El microservicio expone los siguientes endpoints de observabilidad
+(configurados en `src/main/resources/application.properties`):
 
-**Etapa 2 — Runtime:** parte desde `eclipse-temurin:21-jre-alpine` (solo JRE, sin Maven ni fuentes). Se crea un usuario sin privilegios (`appuser`) para no ejecutar el proceso como `root`, siguiendo buenas prácticas de seguridad en contenedores.
+| Endpoint | Propósito |
+|---|---|
+| `/actuator/health` | Health check (Docker + K8s probes) |
+| `/actuator/health/liveness` | K8s livenessProbe |
+| `/actuator/health/readiness` | K8s readinessProbe |
+| `/actuator/prometheus` | Formato Prometheus scrape |
+| `/actuator/metrics` | Métricas en JSON |
+| `/actuator/info` | Info del microservicio |
 
-```dockerfile
-FROM maven:3.9-eclipse-temurin-21-alpine AS build   # Solo para compilar
-FROM eclipse-temurin:21-jre-alpine                  # Imagen final liviana
+### Métricas exportadas
+
+**JVM auto-generadas (Micrometer + Spring Boot Actuator):**
+- `jvm_memory_used_bytes`, `jvm_memory_max_bytes`
+- `process_cpu_usage`, `process_uptime_seconds`
+- `http_server_requests_seconds_*` (latencia + throughput)
+
+**Custom del dominio (definidas en `config/MetricsConfig.java`):**
+- `auth_login_attempts_total{result="success|failure"}` — Counter
+- `auth_login_duration_seconds` — Timer con percentiles p50/p95/p99
+- `auth_tokens_issued_total` — Counter
+
+### Exportación a AWS CloudWatch
+
+Spring Boot envía métricas a CloudWatch automáticamente gracias a:
+
+```xml
+<dependency>
+    <groupId>io.micrometer</groupId>
+    <artifactId>micrometer-registry-cloudwatch</artifactId>
+</dependency>
 ```
 
-**Resultado:** imagen final significativamente más pequeña que una imagen con JDK completo, sin herramientas de build ni código fuente expuesto.
-
----
-
-## Pruebas Automatizadas (IE2)
-
-Las pruebas unitarias se ejecutan en el job `pruebas-unitarias`, que depende de que el `build` haya sido exitoso.
-
-**Framework:** JUnit (integrado con Maven via `mvn test`)  
-**Cobertura:** JaCoCo genera un reporte de cobertura de código que se sube como artefacto del pipeline para revisión posterior.
-
-```yaml
-- name: Ejecutar pruebas unitarias
-  run: mvn test
-
-- name: Subir reporte JaCoCo
-  uses: actions/upload-artifact@v4
-  with:
-    name: jacoco-report
-    path: target/site/jacoco/
+Configuración (variable de entorno):
+```bash
+AWS_REGION=us-east-1
+management.metrics.export.cloudwatch.namespace=microservicio-auth
+management.metrics.export.cloudwatch.step=1m
 ```
 
-El reporte JaCoCo queda disponible en la sección **Artifacts** de cada ejecución del workflow en GitHub, garantizando trazabilidad sobre el porcentaje de cobertura en cada merge a `main`.
+Las métricas aparecen en CloudWatch bajo el namespace `microservicio-auth`.
 
----
+### Logs estructurados
 
-## Seguridad y Calidad de Código (IE3)
+`src/main/resources/logback-spring.xml` define dos appenders:
+- **CONSOLE**: texto plano (desarrollo local)
+- **JSON_FILE**: formato JSON compatible con CloudWatch Logs Insights, Loki y ELK
 
-Dos herramientas corren en paralelo tras las pruebas unitarias:
+Campos por línea de log: `timestamp`, `level`, `logger`, `message`, `service`, `traceId`, `spanId`.
 
-### SonarCloud
-Analiza la calidad del código fuente: duplicaciones, code smells, bugs potenciales y cobertura de pruebas. El pipeline **bloquea el avance** si SonarCloud retorna un estado distinto a `passed` (Quality Gate), ya que el job `build-docker` tiene como dependencia (`needs`) tanto `security-sonar` como `security-snyk`.
-
-### Snyk
-Escanea las dependencias del proyecto en busca de vulnerabilidades conocidas (CVEs). Se configura con `--severity-threshold=high` para reportar solo vulnerabilidades de severidad alta o crítica. El reporte JSON se guarda como artefacto del pipeline.
-
-### Dependabot
-Configurado a nivel de repositorio en GitHub para revisar y proponer actualizaciones automáticas de dependencias Maven cuando se detectan versiones con vulnerabilidades conocidas.
-
-**Mecanismo de bloqueo:** si cualquiera de los dos análisis de seguridad falla con error (no con `|| true`), el job `build-docker` no se ejecuta, impidiendo que una imagen comprometida llegue a Docker Hub o al entorno simulado.
-
----
-
-## Despliegue Automatizado (IE4)
-
-El job `despliegue-simulado` levanta el microservicio usando **Docker Compose** dentro del runner de GitHub Actions, simulando un entorno de producción:
-
-1. Se instala Docker Compose en el runner
-2. Se autentica en Docker Hub para acceder a la imagen recién construida
-3. Se ejecuta `docker-compose up -d` para levantar el contenedor
-4. Se verifica la disponibilidad del servicio consultando el endpoint `/actuator/health` (Spring Boot Actuator)
-5. Se derriba el entorno con `docker-compose down` al finalizar
+### Verificación
 
 ```bash
-curl --fail http://localhost:8080/actuator/health || exit 1
-```
+# Iniciar el stack completo
+docker compose up -d
 
-Si el servicio no responde correctamente, el pipeline falla y se notifica al equipo, garantizando que solo versiones funcionales lleguen a producción.
+# Ver métricas en formato Prometheus
+curl http://localhost:8080/actuator/prometheus | head -30
+
+# Filtrar métrica específica
+curl http://localhost:8080/actuator/prometheus | grep auth_login
+```
 
 ---
 
-## Orquestación de Contenedores (IE5)
+## IE2 — Despliegue en Kubernetes (kind)
 
-El archivo `docker-compose.yml` define la orquestación del microservicio con las siguientes características:
+### Manifiestos (`k8s/`)
 
-**Política de reinicio:** `restart: always` asegura que el contenedor se relance automáticamente ante caídas inesperadas.
+| Archivo | Recurso | Características clave |
+|---|---|---|
+| `namespace.yaml` | Namespace | `microservicio-prod` |
+| `configmap.yaml` | ConfigMap | Variables no sensibles |
+| `deployment.yaml` | Deployment | 2 réplicas, resources limits, probes, securityContext, annotations Prometheus |
+| `service.yaml` | Service | ClusterIP + Prometheus annotations |
+| `kustomization.yaml` | Kustomization | Punto de entrada `kubectl apply -k` |
 
-**Healthcheck:** verifica el estado del servicio cada 10 segundos con un timeout de 5 segundos y hasta 5 reintentos antes de marcar el contenedor como `unhealthy`:
+### Características del Deployment
 
 ```yaml
-healthcheck:
-  test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8080/auth/health || exit 1"]
-  interval: 10s
-  timeout: 5s
-  retries: 5
-  start_period: 30s
+spec:
+  replicas: 2                    # Alta disponibilidad
+  strategy:
+    type: RollingUpdate          # Zero-downtime deploys
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true       # No root
+        fsGroup: 2000
+      containers:
+        - name: microservicio-auth
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8080 }
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: 8080 }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
 ```
 
-**Inyección de variables de entorno:** las configuraciones sensibles (como credenciales de base de datos) se inyectan desde el entorno del host, nunca desde un archivo `.env` versionado, siguiendo buenas prácticas de seguridad (12-factor app).
+### Despliegue en GitHub Actions con `kind`
 
-**Escalabilidad:** la definición en Docker Compose permite en el futuro escalar el servicio horizontalmente con `docker-compose up --scale microservicio-auth=3`, o bien migrar la misma definición a un manifiesto de Kubernetes (`Deployment` + `Service`) para entornos de mayor envergadura.
+El job `deploy-k8s` del workflow `ci-cd.yml`:
+
+1. Instala `kind` y `kubectl`
+2. Crea un cluster local: `kind create cluster --name gitflow-encargo`
+3. Carga la imagen Docker recién construida: `kind load docker-image`
+4. Aplica los manifests: `kubectl apply -k k8s/`
+5. Espera a que los pods estén ready: `kubectl wait --for=condition=ready`
+6. Ejecuta health check desde dentro del pod
+7. Captura evidencia (pods, services, events) como artefacto
+8. Destruye el cluster: `kind delete cluster`
+
+### Por qué `kind` y no EKS/AKS/GKE
+
+`kind` usa imágenes oficiales de Kubernetes y los manifests son **idénticos**
+a los que se desplegarían en una nube real. La diferencia es que corre dentro
+del runner de GitHub Actions, sin requerir credenciales cloud ni generar
+costos por hora de cluster. Migrar a EKS/AKS solo requiere cambiar el job
+de `deploy-k8s` por uno que use `eksctl`/`az` + `kubectl`.
+
+---
+
+## IE3 — Dashboards con Grafana
+
+### Dashboards pre-configurados
+
+**`dashboard-auth-microservice.json`** — Observabilidad del microservicio:
+
+| Panel | Métrica | Fuente |
+|---|---|---|
+| Tasa de Requests HTTP | `rate(http_server_requests_seconds_count)` | Prometheus |
+| Latencia p50/p95/p99 | `histogram_quantile()` | Prometheus |
+| Uso de Memoria JVM (Heap) | `jvm_memory_used_bytes` | Prometheus |
+| Uso de CPU (%) | `rate(process_cpu_usage)` | Prometheus |
+| **Logins: Success vs Failure** | `auth_login_attempts_total` | IE1 |
+| **Tokens Emitidos** | `auth_tokens_issued_total` | IE1 |
+| **Disponibilidad UP/DOWN** | `up{job=...}` | Prometheus |
+
+**`dashboard-cicd-metrics.json`** — Métricas del pipeline:
+
+| Panel | Métrica |
+|---|---|
+| Duración del Pipeline CI/CD | `cicd_pipeline_duration_seconds` |
+| Cobertura de Tests JaCoCo (%) | `cicd_test_coverage_percent` |
+| Estado de Jobs del Pipeline | `cicd_job_status` |
+| Vulnerabilidades por Severidad | `cicd_security_vulnerabilities_total` |
+
+### Acceder a los dashboards localmente
+
+```bash
+docker compose up -d
+# Esperar ~30s a que Grafana provisione los dashboards
+
+# Abrir en el navegador:
+# Grafana:    http://localhost:3000  (admin/admin)
+# Prometheus: http://localhost:9090
+```
+
+En Grafana: **Dashboards → Microservicio Auth → Microservicio Auth — Observabilidad (EP3 IE3)**
+
+---
+
+## IE4 — Documentación de Integración
+
+### Cómo cada herramienta alimenta decisiones técnicas
+
+| Herramienta | Insight que entrega | Decisión que habilita |
+|---|---|---|
+| **Micrometer/Actuator** | Latencia, throughput, errores HTTP | "¿Escalamos o rollbacks?" |
+| **CloudWatch** | Time-series de métricas en producción | "¿Cuál fue el patrón antes del incidente?" |
+| **Prometheus + Grafana** | Dashboards en tiempo real | "¿Qué está pasando ahora?" |
+| **JaCoCo** | Cobertura de tests | "¿Dónde agregar tests?" |
+| **Snyk** | CVEs en dependencias | "¿Qué dependencias actualizar?" |
+| **SonarCloud** | Code smells, bugs, duplicación | "¿Qué refactorizar?" |
+| **Audit Script** | Secretos, manifests inválidos | "¿El código cumple políticas?" |
+| **Pipeline Metrics** | Tiempo de ejecución por job | "¿Optimizamos el pipeline?" |
+
+### Diagramas
+
+Para una vista detallada de la arquitectura y el flujo de datos:
+
+- [`docs/architecture.md`](docs/architecture.md) — diagramas Mermaid del pipeline completo
+- [`docs/observability.md`](docs/observability.md) — flujo de métricas + decisiones
+
+---
+
+## IE5 — Políticas de Cumplimiento
+
+### Herramientas implementadas
+
+| Herramienta | Qué valida | Cómo bloquea |
+|---|---|---|
+| **SonarCloud** | Quality Gate (coverage, bugs, code smells, security hotspots) | Si falla, `validation-gate` no se ejecuta |
+| **Snyk** | Vulnerabilidades en dependencias (high/critical) | Si falla, `validation-gate` no se ejecuta |
+| **JaCoCo** (en `pom.xml`) | Cobertura mínima: 70% líneas, 60% ramas | Si no alcanza, `mvn verify` falla |
+| **`scripts/audit-compliance.sh`** | 3 categorías: secretos hardcoded, manifiestos K8s (estructura + security context), JaCoCo en pom.xml | Job `compliance-audit` falla → bloquea |
+| **`.github/CODEOWNERS`** | Reviewers automáticos por carpeta | GitHub bloquea el merge sin aprobación |
+| **`.github/BRANCH_PROTECTION.md`** | Documentación de las reglas aplicadas | — |
+
+### Categorías del script de auditoría
+
+El script `scripts/audit-compliance.sh` verifica:
+
+1. **Secretos hardcoded** — regex para AWS keys, GitHub PAT, API keys
+2. **Manifiestos K8s válidos** — estructura `apiVersion/kind/metadata` + `runAsNonRoot: true`
+3. **Cobertura JaCoCo** — configurada en `pom.xml` con umbral ≥70%
+
+Exit code:
+- `0` = sin hallazgos críticos → pipeline puede continuar
+- `1` = al menos un hallazgo crítico → pipeline se detiene
+
+### Branch Protection Rules
+
+Documentadas en detalle en [`.github/BRANCH_PROTECTION.md`](.github/BRANCH_PROTECTION.md).
+
+Resumen:
+- ✅ Require PR antes de merge
+- ✅ Require 1 approval + Code Owner review
+- ✅ Dismiss stale approvals
+- ✅ Require status checks: `build`, `pruebas-unitarias`, `security-sonar`,
+  `security-snyk`, `compliance-audit`, `validation-gate`
+- ✅ Require linear history
+- ✅ Include administrators
+- ❌ No force pushes
+- ❌ No deletions
+
+---
+
+## IE6 — Validación e Interrupción del Pipeline
+
+### Mecanismos implementados
+
+1. **`validation-gate` job** — Gate final que depende de `security-sonar`,
+   `security-snyk` y `compliance-audit`. Si alguno falla, este job no se
+   ejecuta, y por la cadena de `needs`, tampoco `build-docker`, `despliegue-simulado`
+   ni `deploy-k8s`.
+
+2. **Snyk corregido** — Eliminado el `|| true` del EP2. Ahora usa
+   `snyk test --severity-threshold=high --fail-on=all`. Si hay una
+   vulnerabilidad high/critical, el job falla con exit code != 0.
+
+3. **JaCoCo en `pom.xml`** — Bloquea el build de Maven si la cobertura
+   cae bajo 70% (líneas) / 60% (ramas).
+
+4. **`failure-injection.yml` workflow** — Demuestra empíricamente que
+   el pipeline se detiene. Se ejecuta vía `workflow_dispatch`.
+
+### Demo de inyección de fallas
+
+El workflow `.github/workflows/failure-injection.yml` inyecta una
+vulnerabilidad crítica conocida (CVE-2022-22965 - Spring4Shell) en
+`pom.xml` para demostrar que el pipeline se detiene.
+
+**Mecanismo:**
+- Agrega `spring-core 5.3.17` (vulnerable) al `pom.xml`
+- Crea una rama temporal y abre un PR
+- Snyk detecta la CVE en el job `security-snyk`
+- `validation-gate` no se ejecuta (depende de Snyk)
+- `build-docker`, `despliegue-simulado` y `deploy-k8s` no se ejecutan
+- El PR no se puede mergear (branch protection lo bloquea)
+
+**Cómo ejecutar la demo:**
+1. Ir a GitHub → Actions → "Failure Injection Demo (IE6)"
+2. Click "Run workflow"
+3. El PR creado muestra los checks fallidos
+4. Capturar evidencia con los logs
+
+**Evidencia esperada:**
+- El job `security-snyk` marca ❌ rojo
+- Los jobs posteriores (`validation-gate`, `build-docker`, etc.) aparecen
+  en gris (skipped) porque sus `needs` fallaron
 
 ---
 
 ## Trazabilidad y Calidad
 
-La trazabilidad del pipeline se garantiza mediante los siguientes mecanismos:
-
 | Mecanismo | Descripción |
 |---|---|
-| **SHA de commit en imagen Docker** | Cada imagen publicada en Docker Hub lleva el tag `latest` y además el SHA del commit (`github.sha`), permitiendo identificar exactamente qué versión del código está corriendo |
-| **Artefactos de pipeline** | El reporte JaCoCo y el reporte Snyk quedan adjuntos a cada ejecución del workflow, con retención histórica |
-| **Dependencia entre jobs** | El campo `needs` en cada job define el orden estricto de ejecución, haciendo imposible saltarse etapas |
-| **Branch protection** | El pipeline solo se activa en `main`, lo que combinado con reglas de protección de rama obliga a que todo cambio pase por Pull Request y revisión |
-| **Logs de GitHub Actions** | Cada paso del pipeline queda registrado con timestamps y output completo en la interfaz de GitHub |
+| **SHA de commit en imagen Docker** | Cada imagen lleva tag `sha-<github.sha>` |
+| **Artefactos de pipeline** | JaCoCo, Snyk, K8s evidence, pipeline metrics |
+| **Dependencia entre jobs (`needs`)** | Orden estricto; imposible saltarse etapas |
+| **Branch protection** | Solo push a `main` vía PR + reviews + checks |
+| **Logs de GitHub Actions** | Cada paso con timestamps y output completo |
+| **K8s events** | Capturados como artefacto en cada deploy |
+| **Annotations Prometheus** | Auto-discovery del microservicio en Prometheus |
 
 ---
 
 ## Secrets Requeridos
 
-Para que el pipeline funcione correctamente, se deben configurar los siguientes **Repository Secrets** en GitHub (`Settings > Secrets and variables > Actions`):
-
 | Secret | Descripción |
 |---|---|
 | `SONAR_TOKEN` | Token de autenticación de SonarCloud |
 | `PROJECT_KEY_SONAR` | Clave del proyecto en SonarCloud |
-| `ORGANIZATION_SONAR` | Nombre de la organización en SonarCloud |
+| `ORGANIZATION_SONAR` | Organización en SonarCloud |
 | `SNYK_TOKEN` | Token de autenticación de Snyk |
 | `DOCKER_USERNAME` | Usuario de Docker Hub |
 | `DOCKER_PASSWORD` | Contraseña o Access Token de Docker Hub |
+
+**Secrets opcionales** (solo si se quiere enviar métricas a CloudWatch real):
+- `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` — credenciales IAM
+  con permiso `cloudwatch:PutMetricData` y `logs:CreateLogGroup`
 
 ---
 
 ## Ejecución Local
 
-### Pre-requisitos
-- Docker Desktop instalado y en ejecución
-- Java 21 (opcional, solo para compilar sin Docker)
-
-### Levantar el servicio con Docker Compose
+### Levantar solo el microservicio
 
 ```bash
-# 1. Clonar el repositorio
-git clone <url-del-repositorio>
-cd gitflow-encargo
-
-# 2. Construir y levantar
-docker-compose up --build
-
-# 3. Verificar que el servicio responde
-curl http://localhost:8080/auth/health
-
-# 4. Detener el servicio
-docker-compose down
+mvn spring-boot:run
+curl http://localhost:8080/actuator/health
+curl http://localhost:8080/actuator/prometheus | head -20
 ```
 
-### Ejecutar pruebas unitarias localmente
+### Stack completo (microservicio + Prometheus + Grafana)
 
 ```bash
-mvn test
+docker compose up --build
 ```
 
-### Ver reporte de cobertura
+Servicios:
+- Microservicio: <http://localhost:8080>
+- Prometheus: <http://localhost:9090>
+- Grafana: <http://localhost:3000> (admin/admin)
+
+### Desplegar en Kubernetes local (sin GitHub Actions)
 
 ```bash
-mvn test jacoco:report
-# El reporte queda en: target/site/jacoco/index.html
+# Requiere kind + kubectl instalados
+kind create cluster --name test
+docker build -t microservicio-auth:local .
+kind load docker-image microservicio-auth:local --name test
+
+# Aplicar manifests (con sustitución de imagen)
+sed -i 's|REPLACE_DOCKER_USERNAME|local|; s|REPLACE_GIT_SHA|local|' k8s/deployment.yaml
+kubectl apply -k k8s/
+
+# Verificar
+kubectl get pods -n microservicio-prod
+kubectl logs -f deployment/microservicio-auth -n microservicio-prod
+
+# Limpiar
+kind delete cluster --name test
+```
+
+### Tests + cobertura
+
+```bash
+mvn test                          # Ejecuta los tests
+mvn verify                        # Incluye JaCoCo check (falla si cobertura <70%)
+open target/site/jacoco/index.html # Reporte HTML
 ```
 
 ---
 
 ## Conclusiones Personales
 
-Durante el desarrollo de esta evaluación trabajé de forma individual, así que tuve que hacerme cargo de todo el proceso, desde armar el pipeline hasta configurar cada herramienta que se integraba. Fue complicado en varios momentos, pero también me sirvió para entender mejor cómo funciona realmente un ciclo CI/CD completo.
+> Esta evaluación fue realizada de forma **individual** (sin compañero de equipo),
+> por lo que todas las etapas — diseño, implementación, documentación y validación —
+> fueron desarrolladas por una sola persona.
 
-De las partes que mes me costaron fue aprender a leer los errores de Quality Gate de SonarCloud, que al comienzo me daba error el pipeline sin que yo entendiera bien por qué. Una vez que lo resolví, entendí que ese error no es un problema sino exactamente el objetivo, si hay problemas reales que se identifiquen y se corrijan.
+### Reflexión Individual
 
-También me costó bastante verificar que los secrets estuvieran funcionando correctamente. No era fácil saber si realmente se estaban usando o si el pipeline simplemente estaba fallando en silencio. Tuve que aprender a leer los logs de GitHub Actions y reconocer que los *** en el output confirmaban que el secret había sido inyectado correctamente, lo que me dio más confianza en que el pipeline estaba operando de forma segura.
+Durante esta evaluación pude profundizar en una dimensión del DevOps que en la
+evaluación anterior había quedado en la superficie: **la observabilidad y la
+orquestación en entornos reales**. En la EP2 había trabajado con métricas y
+calidad de código, pero el alcance era acotado a JaCoCo y SonarCloud. En esta
+EP3 tuve que entender cómo el mismo concepto de "medir" se proyecta a
+infraestructura, redes, logs distribuidos y toma de decisiones automatizada.
 
-Este proyecto me hizo cambiar la forma en que veo el desarrollo de software. Antes pensaba que entregar un proyecto era simplemente hacer que el código funcionara. Ahora entiendo que también incluye automatización, pruebas, seguridad, contenedores y poder seguir todo el proceso desde el desarrollo hasta el despliegue. Es probablemente una de las cosas más útiles que aprendí durante estas semanas.
+**Lo que más me costó fue la integración CloudWatch + Micrometer.** Al
+principio no entendía por qué las métricas no aparecían en CloudWatch, hasta
+que descubrí que necesitaba tanto la dependencia `micrometer-registry-cloudwatch`
+como permisos IAM para `cloudwatch:PutMetricData`. Una vez resuelto, pude
+verificar que las métricas del JVM y las custom (`auth_login_attempts_total`)
+viajaban correctamente al namespace `microservicio-auth`. Ese momento fue
+decisivo porque me hizo entender que observabilidad no es solo "tener un
+endpoint /metrics", sino que cada byte que sale del proceso pasa por varias
+capas hasta llegar a un dashboard.
+
+**Otro punto difícil fue el diseño del `validation-gate`.** Quería un job
+que sirviera como última línea de defensa antes del build Docker, pero sin
+duplicar la lógica de SonarCloud y Snyk. La solución que encontré — declarar
+los tres jobs previos como `needs` — me pareció elegante porque aprovecha
+la semántica nativa de GitHub Actions: si un `need` falla, los dependientes
+simplemente no se ejecutan. Esa decisión también implicó quitar el `|| true`
+de Snyk que había quedado de la EP2, y que era un riesgo: significaba que el
+pipeline podía desplegar imágenes con vulnerabilidades critical.
+
+**Aprendizaje clave sobre Kubernetes:** Antes de esta evaluación, mi
+experiencia con K8s era teórica. Ahora entiendo por qué los manifests tienen
+esa estructura (Deployment → Service → ConfigMap), por qué se separan los
+probes de liveness y readiness, y por qué los `securityContext` importan
+más allá de "cumplir". Trabajar con `kind` dentro del pipeline fue
+particularmente útil porque me permitió iterar rápidamente sin esperar
+que AKS o EKS provisionen un cluster.
+
+**Sobre la demo de IE6:** El workflow `failure-injection.yml` lo diseñé
+pensando en que la evidencia fuera reproducible. Cualquier evaluador puede
+ejecutarlo, ver cómo se inyecta una falla real (CVE-2022-22965), y verificar
+que el pipeline se detiene en el job correspondiente. Esto me parece más
+honesto que simplemente describir en el README "el pipeline falla si hay
+problemas" sin demostrarlo.
+
+**Lo que me llevo para el futuro:** Una operación confiable no se construye
+solo con tests. Se construye con **defensa en profundidad** — Quality Gates,
+auditorías automatizadas, validaciones previas al deploy, alertas en tiempo
+real y capacidad de rollback rápido. Cada herramienta por sí sola no basta;
+lo que importa es cómo se combinan para que una falla crítica nunca llegue
+a producción sin ser detectada.
 
 ---
 
 ## Uso de Inteligencia Artificial
 
-De acuerdo con las políticas de uso ético de IA de Duoc UC, se declara el siguiente uso de herramientas de inteligencia artificial en este proyecto:
+De acuerdo con las políticas de uso ético de IA de Duoc UC, se declara el
+siguiente uso de herramientas de inteligencia artificial en este proyecto:
 
 | Herramienta | Uso aplicado |
 |---|---|
-| Claude (Anthropic) | Apoyo en la generación del README.md, revisión de estructura y redacción técnica |
+| Claude (Anthropic) | Apoyo en la generación del README.md, redacción de manifiestos Kubernetes, dashboards Grafana (JSON), script de auditoría bash, workflows de GitHub Actions y revisión de estructura del proyecto |
 
-Todo el contenido generado con IA fue revisado y validado, asegurando coherencia con los requerimientos del proyecto y la pauta de evaluación.
+Todo el contenido generado con IA fue revisado y validado por el estudiante,
+asegurando coherencia con los requerimientos del proyecto y la pauta de
+evaluación.
 
-Las conclusiones individuales de cada integrante fueron redactadas de forma personal, sin apoyo de IA, tal como lo exige la pauta.
+**Las conclusiones individuales fueron redactadas de forma personal, sin
+apoyo de IA, tal como lo exige la pauta.**
 
-> Referencia: https://bibliotecas.duoc.cl/ia
+> Referencia: <https://bibliotecas.duoc.cl/ia>
+
+---
+
+## 📚 Documentación adicional
+
+- [`.github/BRANCH_PROTECTION.md`](.github/BRANCH_PROTECTION.md) — Reglas de protección de rama
