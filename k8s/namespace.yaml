@@ -1,0 +1,14 @@
+# ============================================================
+# IE2 — Namespace para el microservicio de autenticación
+# ============================================================
+# Aísla el entorno de producción simulado del resto del cluster.
+# En CI/CD con kind, este namespace se aplica antes del Deployment.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: microservicio-prod
+  labels:
+    name: microservicio-prod
+    environment: production
+    app: microservicio-auth
+    managed-by: gitflow-encargo-pipeline

@@ -1,0 +1,131 @@
+# ============================================================
+# IE2 — Deployment del microservicio (con observabilidad)
+# ============================================================
+#
+# Características clave:
+#   - 2 réplicas para alta disponibilidad
+#   - Liveness/Readiness probes vía /actuator/health (Spring Boot Actuator)
+#   - Resource requests/limits explícitos
+#   - Annotations Prometheus para auto-discovery
+#   - Security context: no root
+#   - ConfigMap inyectada como variables de entorno
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: microservicio-auth
+  namespace: microservicio-prod
+  labels:
+    app: microservicio-auth
+    version: v1
+    tier: backend
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: microservicio-auth
+  template:
+    metadata:
+      labels:
+        app: microservicio-auth
+        version: v1
+      annotations:
+        # ============================================================
+        # Prometheus auto-discovery (scrape annotations)
+        # ============================================================
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/scheme: "http"
+    spec:
+      # ============================================================
+      # Security context: no ejecutar como root
+      # ============================================================
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 3000
+        fsGroup: 2000
+      containers:
+        - name: microservicio-auth
+          # Imagen fija por SHA (trazabilidad: cada commit = imagen única)
+          image: REPLACE_DOCKER_USERNAME/microservicio-auth:REPLACE_GIT_SHA
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+          # ============================================================
+          # Variables de entorno desde ConfigMap
+          # ============================================================
+          envFrom:
+            - configMapRef:
+                name: microservicio-auth-config
+
+          # ============================================================
+          # Liveness probe: si falla N veces, K8s reinicia el pod
+          # ============================================================
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
+          # ============================================================
+          # Readiness probe: si falla, el pod no recibe tráfico
+          # ============================================================
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
+
+          # ============================================================
+          # Resources: requests/limits para CPU y memoria
+          # ============================================================
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+          # ============================================================
+          # Security context del contenedor
+          # ============================================================
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+          # ============================================================
+          # Montaje de volumen para logs (writable, no root FS)
+          # ============================================================
+          volumeMounts:
+            - name: logs-volume
+              mountPath: /app/logs
+            - name: tmp-volume
+              mountPath: /tmp
+
+      volumes:
+        - name: logs-volume
+          emptyDir: {}
+        - name: tmp-volume
+          emptyDir: {}

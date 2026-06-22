@@ -1,0 +1,27 @@
+# ============================================================
+# IE2 — Kustomization: punto de entrada para `kubectl apply -k`
+# ============================================================
+# Permite parametrizar la imagen (tag = SHA del commit) desde
+# la línea de comandos sin editar los archivos.
+#
+# Uso desde el pipeline CI/CD:
+#   kubectl apply -k k8s/
+#
+# Con sustitución de imagen:
+#   kustomize edit set image \
+#     microservicio-auth=docker.io/user/microservicio-auth:$GITHUB_SHA
+#
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: microservicio-prod
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+
+commonLabels:
+  app: microservicio-auth
+  managed-by: kustomize

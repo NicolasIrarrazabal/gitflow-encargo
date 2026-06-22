@@ -1,0 +1,31 @@
+# ============================================================
+# IE2 — ConfigMap: configuración NO sensible del microservicio
+# ============================================================
+# Datos no sensibles se inyectan como variables de entorno.
+# Secretos (credenciales, tokens) van en Secret.yaml (no incluido
+# en este repo para evitar exposición).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: microservicio-auth-config
+  namespace: microservicio-prod
+  labels:
+    app: microservicio-auth
+data:
+  # Identificador del servicio
+  SPRING_APPLICATION_NAME: "microservicio-auth"
+  SERVER_PORT: "8080"
+
+  # Configuración de observabilidad (IE1 — Parcial N°3)
+  # CloudWatch como destino principal de métricas/logs
+  AWS_REGION: "us-east-1"
+  CLOUDWATCH_LOG_GROUP: "microservicio-auth"
+  CLOUDWATCH_LOGS_ENABLED: "true"
+  ENVIRONMENT: "production"
+
+  # Actuator — expone los endpoints requeridos por Prometheus y K8s probes
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,metrics,prometheus,loggers"
+
+  # Tags de identificación de métricas
+  MANAGEMENT_METRICS_TAGS_APPLICATION: "microservicio-auth"
+  MANAGEMENT_METRICS_TAGS_ENVIRONMENT: "production"
