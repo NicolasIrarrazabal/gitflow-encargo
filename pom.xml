@@ -22,8 +22,27 @@
 
     <properties>
         <java.version>21</java.version>
-        <!-- tomcat.version eliminado: Spring Boot 3.5.3 incluye una versión segura -->
+        <!-- Fuerza Netty seguro (CVEs en 4.1.122.Final vía AWS SDK) -->
+        <netty.version>4.1.135.Final</netty.version>
     </properties>
+
+    <!-- ============================================================ -->
+    <!-- Gestión de versiones para dependencias transitivas con CVEs  -->
+    <!-- ============================================================ -->
+    <dependencyManagement>
+        <dependencies>
+
+            <!-- Micrometer: fuerza versión parcheada (SNYK-JAVA-IOMICROMETER-17260885) -->
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-bom</artifactId>
+                <version>1.15.12</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+        </dependencies>
+    </dependencyManagement>
 
     <!-- ============================================================ -->
     <!-- Dependencias                                                  -->
@@ -53,17 +72,19 @@
         </dependency>
 
         <!-- AWS CloudWatch: exporta métricas JVM/APP a CloudWatch Metrics -->
-        <!-- Usa SDK v2 (cloudwatch2); versión gestionada por Spring Boot BOM -->
+        <!-- Usa SDK v2 (cloudwatch2); Netty forzado a 4.1.135.Final via <properties> -->
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-cloudwatch2</artifactId>
         </dependency>
 
         <!-- Logback JSON encoder: logs estructurados (compatibles con CloudWatch Logs Insights) -->
+        <!-- v8.1 usa com.fasterxml.jackson (gestionado por Spring Boot BOM, sin CVEs) -->
+        <!-- v9.0 usa tools.jackson.core@3.0.1 con CVEs sin parche disponible         -->
         <dependency>
             <groupId>net.logstash.logback</groupId>
             <artifactId>logstash-logback-encoder</artifactId>
-            <version>9.0</version>
+            <version>8.1</version>
         </dependency>
 
         <!-- Validación de modelos (@NotBlank, @NotNull, etc.) -->
