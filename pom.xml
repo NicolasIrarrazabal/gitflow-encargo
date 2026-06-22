@@ -36,10 +36,33 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
-        <!-- Endpoints de salud y métricas (/actuator/health) -->
+        <!-- Endpoints de salud y métricas (/actuator/health, /actuator/prometheus) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- ============================================================ -->
+        <!-- IE1 — Observabilidad (Evaluación Parcial N°3)               -->
+        <!-- ============================================================ -->
+
+        <!-- Micrometer: fachada de métricas compatible con Spring Boot Actuator -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
+        <!-- AWS CloudWatch: exporta métricas JVM/APP a CloudWatch Metrics -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-cloudwatch</artifactId>
+        </dependency>
+
+        <!-- Logback JSON encoder: logs estructurados (compatibles con CloudWatch Logs Insights) -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>7.4</version>
         </dependency>
 
         <!-- Validación de modelos (@NotBlank, @NotNull, etc.) -->
