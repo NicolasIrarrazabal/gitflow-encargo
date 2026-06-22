@@ -1,5 +1,5 @@
 # ================================================================
-# Dockerfile — Microservicio Auth
+# Dockerfile — Microservicio Auth (Evaluación Parcial N°3)
 # ================================================================
 
 
@@ -25,14 +25,26 @@ FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
+# wget es necesario para health checks de Docker/K8s y para los
+# liveness/readiness probes del Deployment
+RUN apk add --no-cache wget curl
+
 # Creamos usuario sin privilegios para no ejecutar el proceso como root
 # Buena práctica de seguridad en contenedores de producción
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# Directorio de logs (writable por appuser)
+RUN mkdir -p /app/logs && chown -R appuser:appgroup /app/logs
+
 USER appuser
 
 # Copiamos únicamente el JAR generado en el stage anterior
 COPY --from=build /app/target/*.jar auth-service.jar
 
 EXPOSE 8080
+
+# Health check a nivel de imagen (Docker usa esto en docker-compose)
+HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=30s \
+  CMD wget --quiet --tries=1 --spider http://localhost:8080/actuator/health || exit 1
 
 ENTRYPOINT ["java", "-jar", "auth-service.jar"]

@@ -4,6 +4,10 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 
+# Logs generados por el microservicio (no versionar)
+logs/
+*.log
+
 ### STS ###
 .apt_generated
 .classpath
