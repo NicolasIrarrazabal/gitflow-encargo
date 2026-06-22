@@ -5,12 +5,12 @@
     <modelVersion>4.0.0</modelVersion>
 
     <!-- ============================================================ -->
-    <!-- Proyecto base: Spring Boot 3.5.3                             -->
+    <!-- Proyecto base: Spring Boot 3.5.15                            -->
     <!-- ============================================================ -->
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.3</version>
+        <version>3.5.15</version>
         <relativePath/>
     </parent>
 
@@ -39,6 +39,19 @@
                 <version>1.15.12</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+
+            <!-- Jackson: fuerza versión segura para CVEs en jackson-core@2.19.1      -->
+            <!-- introducidos transitivamente por logstash-logback-encoder@8.1        -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-core</artifactId>
+                <version>2.19.2</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>2.19.2</version>
             </dependency>
 
         </dependencies>
