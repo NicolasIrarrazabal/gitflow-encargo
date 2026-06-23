@@ -142,6 +142,9 @@ jobs:
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
+      - name: Generar reporte JaCoCo XML
+        run: mvn -B test jacoco:report
+
       - name: Escaneo de calidad con SonarCloud
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -149,12 +152,12 @@ jobs:
           PROJECT_KEY_SONAR: ${{ secrets.PROJECT_KEY_SONAR }}
           ORGANIZATION_SONAR: ${{ secrets.ORGANIZATION_SONAR }}
         run: >
-          mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+          mvn -B sonar:sonar
           -Dsonar.projectKey=$PROJECT_KEY_SONAR
           -Dsonar.organization=$ORGANIZATION_SONAR
           -Dsonar.host.url=https://sonarcloud.io
           -Dsonar.login=$SONAR_TOKEN
-          -DskipTests
+          -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
 
   # ============================================================
   # 3B. ANÁLISIS DE VULNERABILIDADES - SNYK
