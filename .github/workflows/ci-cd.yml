@@ -146,12 +146,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          PROJECT_KEY_SONAR: ${{ secrets.PROJECT_KEY_SONAR }}
+          ORGANIZATION_SONAR: ${{ secrets.ORGANIZATION_SONAR }}
         run: >
           mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
-          -Dsonar.projectKey=${{ secrets.PROJECT_KEY_SONAR }}
-          -Dsonar.organization=${{ secrets.ORGANIZATION_SONAR }}
+          -Dsonar.projectKey=$PROJECT_KEY_SONAR
+          -Dsonar.organization=$ORGANIZATION_SONAR
           -Dsonar.host.url=https://sonarcloud.io
-          -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+          -Dsonar.login=$SONAR_TOKEN
           -DskipTests
 
   # ============================================================
@@ -300,10 +302,13 @@ jobs:
 
       - name: Extraer metadata
         id: meta
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         run: |
-          IMAGE="${{ secrets.DOCKER_USERNAME }}/microservicio-auth"
+          IMAGE="$DOCKER_USERNAME/microservicio-auth"
           TAG="sha-${{ github.sha }}"
           echo "image-tag=$IMAGE:$TAG" >> $GITHUB_OUTPUT
+          echo "image-latest=$IMAGE:latest" >> $GITHUB_OUTPUT
           echo "Imagen: $IMAGE:$TAG"
 
       - name: Construir y subir imagen Docker
@@ -313,7 +318,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.meta.outputs.image-tag }}
-            ${{ secrets.DOCKER_USERNAME }}/microservicio-auth:latest
+            ${{ steps.meta.outputs.image-latest }}
 
   # ============================================================
   # 6. DESPLIEGUE SIMULADO (Docker Compose)
@@ -378,15 +383,19 @@ jobs:
         run: kind create cluster --name gitflow-encargo --wait 60s
 
       - name: Cargar imagen Docker al cluster
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         run: |
-          IMAGE_TAG="${{ secrets.DOCKER_USERNAME }}/microservicio-auth:sha-${{ github.sha }}"
+          IMAGE_TAG="$DOCKER_USERNAME/microservicio-auth:sha-${{ github.sha }}"
           docker pull "$IMAGE_TAG"
           kind load docker-image "$IMAGE_TAG" --name gitflow-encargo
 
       - name: Reemplazar placeholders en manifests
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         run: |
           # Sustituir REPLACE_DOCKER_USERNAME y REPLACE_GIT_SHA en los manifests
-          USERNAME="${{ secrets.DOCKER_USERNAME }}"
+          USERNAME="$DOCKER_USERNAME"
           SHA="${{ github.sha }}"
           IMAGE="${USERNAME}/microservicio-auth:sha-${SHA}"
           echo "Imagen: $IMAGE"
