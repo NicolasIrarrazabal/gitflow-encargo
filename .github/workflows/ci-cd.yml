@@ -379,8 +379,9 @@ jobs:
 
       - name: Cargar imagen Docker al cluster
         run: |
-          docker pull ${{ needs.build-docker.outputs.image-tag }}
-          kind load docker-image ${{ needs.build-docker.outputs.image-tag }} --name gitflow-encargo
+          IMAGE_TAG="${{ secrets.DOCKER_USERNAME }}/microservicio-auth:sha-${{ github.sha }}"
+          docker pull "$IMAGE_TAG"
+          kind load docker-image "$IMAGE_TAG" --name gitflow-encargo
 
       - name: Reemplazar placeholders en manifests
         run: |
