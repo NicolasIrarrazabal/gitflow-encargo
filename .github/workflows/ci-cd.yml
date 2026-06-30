@@ -395,7 +395,15 @@ jobs:
             # de levantar el nuevo. Implica un breve corte de servicio, pero
             # evita el conflicto de puerto al renombrar sin detener. Si el
             # nuevo contenedor no queda healthy, se revierte al anterior.
+            #
+            # Limpieza defensiva: si un despliegue previo falló a mitad de
+            # camino (p.ej. por conflicto de puerto), puede quedar un
+            # contenedor huérfano ocupando el nombre auth_api o
+            # auth_api_old. Se eliminan forzosamente antes de continuar
+            # para que rename/run nunca choquen con nombres en uso.
+            docker rm -f auth_api_old 2>/dev/null || true
             docker rename auth_api auth_api_old 2>/dev/null || true
+            docker rm -f auth_api 2>/dev/null || true
             docker stop auth_api_old 2>/dev/null || true
 
             docker run -d \
