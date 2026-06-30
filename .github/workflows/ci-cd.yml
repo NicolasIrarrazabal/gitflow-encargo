@@ -1,25 +1,10 @@
 name: CI/CD Pipeline - Auth Microservice (EP3)
 
-# ============================================================
-# Evaluación Parcial N°3 — Pipeline completo
-# ============================================================
-# Se ejecuta en:
-#   - push a main: pipeline completo (build → K8s deploy)
-#   - pull_request a main: solo CI (build → security)
-#   - workflow_dispatch: ejecución manual
-#
-# Jobs:
-#   1. build                    → compile Maven
-#   2. pruebas-unitarias        → JUnit + JaCoCo coverage
-#   3. security-sonar           → SonarCloud Quality Gate
-#   4. security-snyk            → Snyk vuln scan
-#   5. compliance-audit         → script de auditoría IE5
-#   6. validation-gate          → gate final IE6 (bloquea si falla)
-#   7. publish-pipeline-metrics → métricas CI/CD para dashboards IE3
-#   8. build-docker             → construye y publica imagen
-#   9. despliegue-simulado      → docker-compose local
-#  10. deploy-ec2               → despliegue en AWS EC2 vía SSH
-#
+# Evaluación Parcial N°3.
+# push a main corre el pipeline completo, pull_request solo corre hasta
+# los checks de seguridad/calidad, y workflow_dispatch permite correrlo
+# a mano. Orden de jobs: build, tests, sonar/snyk/audit en paralelo,
+# validation-gate, build-docker, despliegue-simulado y deploy-ec2.
 on:
   push:
     branches: [ "main" ]
@@ -34,9 +19,6 @@ concurrency:
 
 jobs:
 
-  # ============================================================
-  # 1. BUILD
-  # ============================================================
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -62,9 +44,6 @@ jobs:
           name: app-jar
           path: target/*.jar
 
-  # ============================================================
-  # 2. PRUEBAS UNITARIAS + COBERTURA
-  # ============================================================
   pruebas-unitarias:
     name: Pruebas Unitarias
     needs: build
@@ -117,9 +96,6 @@ jobs:
           name: cicd-metrics-unit
           path: cicd_metrics.txt
 
-  # ============================================================
-  # 3A. ANÁLISIS DE CALIDAD - SONARCLOUD
-  # ============================================================
   security-sonar:
     name: SonarCloud
     needs: pruebas-unitarias
@@ -159,12 +135,9 @@ jobs:
           -Dsonar.login=$SONAR_TOKEN
           -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
 
-  # ============================================================
-  # 3B. ANÁLISIS DE VULNERABILIDADES - SNYK
-  # ============================================================
-  # IE6 — CORREGIDO: el comando Snyk ya NO usa `|| true`,
-  # por lo que si hay vulnerabilidades high/critical el job
-  # falla y bloquea el pipeline (validation-gate no se ejecuta).
+  # IE6: a diferencia de la versión del EP2, aquí no se usa `|| true`,
+  # así que si hay vulnerabilidades high/critical el job falla de verdad
+  # y bloquea validation-gate.
   security-snyk:
     name: Snyk Security
     needs: pruebas-unitarias
@@ -187,12 +160,8 @@ jobs:
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
-      # ============================================================
-      # IE6: el pipeline se DETIENE si Snyk detecta vulnerabilidades
-      # de severidad high o critical. Sin `|| true`, exit code != 0
-      # marca el job como failed, y `needs` propaga el fallo a
-      # validation-gate → build-docker → deploy-ec2.
-      # ============================================================
+      # Sin el `|| true`, un exit code distinto de 0 marca el job
+      # como failed y eso se propaga via `needs` hasta deploy-ec2.
       - name: Analisis de dependencias con Snyk (FAIL ON HIGH/CRITICAL)
         run: snyk test --severity-threshold=high --fail-on=all
         env:
@@ -205,9 +174,6 @@ jobs:
           name: snyk-security-report
           path: snyk-report.json
 
-  # ============================================================
-  # 3C. AUDITORÍA DE CUMPLIMIENTO (IE5)
-  # ============================================================
   compliance-audit:
     name: Compliance Audit
     needs: pruebas-unitarias
@@ -218,11 +184,8 @@ jobs:
       - name: Hacer ejecutable el script de auditoría
         run: chmod +x scripts/audit-compliance.sh
 
-      # ============================================================
-      # IE5 + IE6: este job falla si encuentra secretos hardcoded,
-      # imágenes sin pin, manifiestos K8s inválidos, etc.
-      # Bloquea el pipeline (validation-gate depende de él).
-      # ============================================================
+      # Falla si el script encuentra secretos hardcoded, configuración
+      # insegura del Dockerfile o falta de umbral de cobertura en pom.xml.
       - name: Ejecutar auditoría de cumplimiento
         run: ./scripts/audit-compliance.sh .
 
@@ -232,19 +195,11 @@ jobs:
         with:
           name: compliance-audit-log
           path: compliance-audit.log
-        # Si el script falla, capturamos el log como evidenciamême en error.
-        # NOTA: el sub-step anterior no se ejecuta si el audit falla,
-        # pero usamos `if: always()` para que lo intente.
+        # if: always() para subir el log igual aunque el paso anterior falle.
 
-  # ============================================================
-  # 4. VALIDATION GATE (IE6 — gate final)
-  # ============================================================
-  # Este job es el ÚLTIMO punto de control antes del build de
-  # Docker. Si falla, NINGÚN job posterior se ejecuta (gracias a
-  # `needs: [validation-gate]` en build-docker).
-  #
-  # Es el equivalente a "Quality Gate" de SonarCloud pero
-  # aplicado a TODO el pipeline.
+  # Gate final (IE6) antes de tocar Docker. Si security-sonar,
+  # security-snyk o compliance-audit fallaron, este job ni siquiera
+  # corre, y por needs tampoco corre nada después.
   validation-gate:
     name: Validation Gate
     needs: [security-sonar, security-snyk, compliance-audit]
@@ -283,9 +238,6 @@ jobs:
             gate_metrics.txt
             gate_timestamp.txt
 
-  # ============================================================
-  # 5. BUILD DOCKER IMAGE
-  # ============================================================
   build-docker:
     name: Build Docker Image
     needs: validation-gate
@@ -323,9 +275,6 @@ jobs:
             ${{ steps.meta.outputs.image-tag }}
             ${{ steps.meta.outputs.image-latest }}
 
-  # ============================================================
-  # 6. DESPLIEGUE SIMULADO (Docker Compose)
-  # ============================================================
   despliegue-simulado:
     name: Despliegue Simulado (Compose)
     needs: build-docker
@@ -356,13 +305,9 @@ jobs:
         if: always()
         run: docker compose down
 
-  # ============================================================
-  # 7. DEPLOYMENT A AWS EC2 (IE2 — GitHub Actions + SSH)
-  # ============================================================
-  # Despliega el microservicio directamente en una instancia EC2
-  # vía SSH: hace pull de la imagen recién publicada en Docker Hub,
-  # reemplaza el contenedor en ejecución y valida el health check
-  # remoto. Sustituye al despliegue orquestado con Kubernetes (kind).
+  # IE2: despliegue directo en EC2 por SSH, según indicación del profesor.
+  # Hace pull de la imagen recién publicada,
+  # reemplaza el contenedor en ejecución y valida el health check remoto.
   deploy-ec2:
     name: Deploy to EC2
     needs: build-docker
@@ -467,9 +412,6 @@ jobs:
           name: ec2-deploy-evidence
           path: ec2-evidence/
 
-  # ============================================================
-  # 8. PUBLICAR MÉTRICAS DEL PIPELINE (IE3)
-  # ============================================================
   publish-pipeline-metrics:
     name: Publish Pipeline Metrics
     needs: validation-gate

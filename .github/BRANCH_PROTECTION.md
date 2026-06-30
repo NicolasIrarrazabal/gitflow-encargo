@@ -1,4 +1,4 @@
-# 🛡️ Branch Protection Rules — Evaluación Parcial N°3 (IE5)
+# Branch Protection Rules (IE5)
 
 Este documento describe las **reglas de protección de rama** configuradas en GitHub
 para el repositorio `gitflow-encargo`. Estas reglas complementan las herramientas
@@ -7,34 +7,29 @@ ningún cambio que incumpla los estándares de calidad llegue a producción.
 
 ---
 
-## 📍 Configuración
+## Configuración
 
 Las reglas se aplican en:
 **GitHub → Settings → Branches → Branch protection rules → `main`**
 
 ---
 
-## ✅ Reglas habilitadas
+## Reglas habilitadas
 
 ### 1. Require a pull request before merging
-- ✅ Activado
-- **Justificación:** Ningún commit puede llegar directamente a `main`. Todo cambio
-  debe pasar por un PR que sea revisado y aprobado.
+Activado. Ningún commit llega directo a `main`, todo cambio pasa por PR.
 
 ### 2. Require approvals
-- ✅ Activado — mínimo **1 reviewer**
-- **Code Owners:** la lista en `.github/CODEOWNERS` asigna automáticamente al
-  owner cuando se modifican archivos críticos (`.github/workflows/`,
-  `observability/`, `src/main/`, `Dockerfile`/`docker-compose.yml`).
+Activado, mínimo 1 reviewer. `.github/CODEOWNERS` asigna automáticamente al
+owner cuando se tocan archivos críticos (`.github/workflows/`, `observability/`,
+`src/main/`, `Dockerfile`/`docker-compose.yml`).
 
 ### 3. Dismiss stale pull request approvals when new commits are pushed
-- ✅ Activado
-- **Justificación:** Si el autor hace push de nuevos commits, las aprobaciones
-  anteriores se invalidan, obligando a una re-revisión.
+Activado. Si se hace push de nuevos commits, las aprobaciones previas quedan
+invalidadas y hay que revisar de nuevo.
 
 ### 4. Require status checks to pass before merging
-- ✅ Activado
-- **Checks requeridos (todos deben pasar):**
+Activado. Checks requeridos:
   | Check name | Descripción |
   |---|---|
   | `build` | Compilación Maven del proyecto |
@@ -45,29 +40,24 @@ Las reglas se aplican en:
   | `validation-gate` | Gate final que valida todas las métricas anteriores |
 
 ### 5. Require linear history
-- ✅ Activado
-- **Justificación:** Evita merge commits ruidosos. Solo rebase o squash merge.
+Activado, solo rebase o squash merge (sin merge commits ruidosos).
 
 ### 6. Include administrators
-- ✅ Activado
-- **Justificación:** Los administradores también deben cumplir las reglas,
-  no pueden saltarse los checks (evita "privilege escalation").
+Activado. Ni los admins pueden saltarse los checks.
 
 ### 7. Restrict who can push to matching branches
-- ✅ Activado — solo `NicolasIrarrazabal` (admin) y el bot de GitHub Actions
-- **Justificación:** Impide que contribuidores externos hagan push directo.
+Activado, solo `NicolasIrarrazabal` (admin) y el bot de GitHub Actions pueden
+hacer push directo.
 
 ### 8. Allow force pushes
-- ❌ Desactivado
-- **Justificación:** Mantiene la historia inmutable y trazable.
+Desactivado.
 
 ### 9. Allow deletions
-- ❌ Desactivado
-- **Justificación:** Evita que la rama `main` se elimine accidentalmente.
+Desactivado, para que `main` no se pueda borrar por error.
 
 ---
 
-## ☁️ Nota sobre el entorno de despliegue (IE2)
+## Nota sobre el entorno de despliegue (IE2)
 
 El despliegue orquestado del microservicio se realiza en una instancia
 **AWS EC2**, gestionada vía SSH desde el job `deploy-ec2` del pipeline
@@ -76,39 +66,15 @@ contenedor y rollback automático si no queda `healthy` tras el despliegue.
 
 ---
 
-```
-       Push a feature branch
-                ↓
-       Pull Request a main
-                ↓
-   ┌──────────┴──────────┐
-   │ Code Owner Review   │ ← CODEOWNERS asigna reviewer automático
-   └──────────┬──────────┘
-              ↓
-   ┌──────────┴──────────────────────┐
-   │ Status checks (todos required): │
-   │   • build                       │
-   │   • pruebas-unitarias           │
-   │   • security-sonar              │
-   │   • security-snyk               │
-   │   • compliance-audit            │
-   │   • validation-gate             │
-   └──────────┬──────────────────────┘
-              ↓
-   ┌──────────┴──────────┐
-   │ Aprobación mínima   │
-   │ + linear history    │
-   └──────────┬──────────┘
-              ↓
-       Squash and merge
-              ↓
-       CI/CD Pipeline corre
-       (build → tests → deploy EC2)
-```
+Flujo resumido: push a una rama → PR a main → review de CODEOWNERS →
+pasan los status checks (build, pruebas-unitarias, security-sonar,
+security-snyk, compliance-audit, validation-gate) → aprobación + historia
+lineal → squash and merge → corre el pipeline completo (build, tests,
+deploy a EC2).
 
 ---
 
-## 🛠️ Configuración via API (referencia)
+## Configuración via API (referencia)
 
 Si necesitas replicar estas reglas via API de GitHub:
 
@@ -126,7 +92,7 @@ gh api \
 
 ---
 
-## 📚 Referencias
+## Referencias
 
 - [GitHub Docs: About branch protection rules](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
 - [GitHub Docs: CODEOWNERS](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners)

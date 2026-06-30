@@ -1,8 +1,4 @@
-# ============================================================
-# IE3 — Grafana dashboards provider
-# ============================================================
-# Indica a Grafana dónde buscar dashboards JSON para provisionarlos
-# automáticamente al iniciar.
+# IE3: le dice a Grafana donde buscar los dashboards JSON al iniciar.
 
 apiVersion: 1
 

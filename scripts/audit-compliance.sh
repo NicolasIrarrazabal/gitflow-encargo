@@ -1,7 +1,5 @@
 #!/bin/bash
-# ============================================================
 # IE5 — Script de auditoría de cumplimiento
-# ============================================================
 #
 # Verifica 3 categorías clave de cumplimiento:
 #   1. No secretos hardcoded (API keys, passwords, tokens)
@@ -17,25 +15,16 @@ set -e
 REPO_ROOT="${1:-.}"
 FAILURES=0
 
-echo "============================================================"
-echo "  IE5 — Auditoría de Cumplimiento"
-echo "  Repo: $REPO_ROOT"
-echo "  Fecha: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-echo "============================================================"
+echo "Auditoria de cumplimiento (IE5) - repo: $REPO_ROOT - $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 echo ""
 
-# ============================================================
-# Helpers
-# ============================================================
-print_ok()    { echo "  [OK]      $1"; }
-print_fail()  { echo "  [FAIL]    $1"; FAILURES=$((FAILURES+1)); }
-print_info()  { echo "  [INFO]    $1"; }
-section()     { echo ""; echo "--- $1 ---"; }
+print_ok() { echo "  [OK] $1"; }
+print_fail() { echo "  [FAIL] $1"; FAILURES=$((FAILURES+1)); }
+print_info() { echo "  [INFO] $1"; }
+section() { echo ""; echo "--- $1 ---"; }
 
-# ============================================================
 # 1. Detección de secretos hardcoded
-# ============================================================
-section "1. Detección de secretos hardcoded"
+section "Secretos hardcoded"
 
 SECRET_PATTERNS=(
     'AKIA[0-9A-Z]{16}'                     # AWS Access Key
@@ -68,10 +57,8 @@ else
     print_fail "Posibles secretos hardcodeados detectados (revisar)"
 fi
 
-# ============================================================
 # 2. Validación de configuración segura de despliegue (Dockerfile/EC2)
-# ============================================================
-section "2. Validación de configuración segura de despliegue (Dockerfile/EC2)"
+section "Configuracion segura de despliegue (Dockerfile/EC2)"
 
 DOCKERFILE="$REPO_ROOT/Dockerfile"
 if [ -f "$DOCKERFILE" ]; then
@@ -102,10 +89,8 @@ else
     print_info "No se encontró job deploy-ec2 en el workflow"
 fi
 
-# ============================================================
 # 3. Verificar JaCoCo en pom.xml
-# ============================================================
-section "3. Cobertura JaCoCo en pom.xml"
+section "Cobertura JaCoCo en pom.xml"
 
 POM_FILE="$REPO_ROOT/pom.xml"
 if [ -f "$POM_FILE" ]; then
@@ -125,22 +110,13 @@ else
     print_info "No se encontró pom.xml"
 fi
 
-# ============================================================
-# Resumen final
-# ============================================================
 echo ""
-echo "============================================================"
-echo "  RESUMEN DE AUDITORÍA"
-echo "============================================================"
-echo "  Fallos críticos:  $FAILURES"
-echo "============================================================"
+echo "Resumen: $FAILURES fallo(s) critico(s)"
 
 if [ "$FAILURES" -gt 0 ]; then
-    echo ""
-    echo "❌ AUDITORÍA FALLÓ — el pipeline debe detenerse"
+    echo "Auditoria fallida, el pipeline se detiene aqui."
     exit 1
 fi
 
-echo ""
-echo "✅ AUDITORÍA EXITOSA — pipeline puede continuar"
+echo "Auditoria OK, el pipeline puede continuar."
 exit 0

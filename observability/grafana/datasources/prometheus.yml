@@ -1,8 +1,4 @@
-# ============================================================
-# IE3 — Grafana datasource: Prometheus
-# ============================================================
-# Configuración de provisioning: Grafana levanta y conecta
-# automáticamente Prometheus como datasource por defecto.
+# IE3: provisioning de Grafana, conecta Prometheus como datasource default.
 
 apiVersion: 1
 

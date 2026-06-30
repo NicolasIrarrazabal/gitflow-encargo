@@ -1,8 +1,6 @@
 name: Failure Injection Demo (IE6)
 
-# ============================================================
 # IE6 — Demostración de que el pipeline se DETIENE
-# ============================================================
 # Inyecta una vulnerabilidad conocida (CVE-2022-22965 -
 # Spring4Shell) en pom.xml y demuestra que el job `security-snyk`
 # falla, lo que bloquea `validation-gate` y por extensión
@@ -15,9 +13,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ============================================================
-  # JOB 1: Inyectar falla en una rama temporal
-  # ============================================================
   inject-failure:
     name: Inyectar Falla
     runs-on: ubuntu-latest
@@ -52,7 +47,7 @@ jobs:
           head: ${{ env.BRANCH_NAME }}
           branch: main
           body: |
-            ## 🚨 DEMO IE6 — Failure Injection
+            ## DEMO IE6 - Failure Injection
 
             Este PR **NO debe mergearse a main**. Se creó para demostrar
             que el pipeline se detiene ante una vulnerabilidad crítica.
@@ -67,9 +62,6 @@ jobs:
 
             Cierra este PR sin mergear después de capturar la evidencia.
 
-  # ============================================================
-  # JOB 2: Documentar evidencia (corre solo si inject-failure falló)
-  # ============================================================
   capture-evidence:
     name: Capturar Evidencia
     needs: inject-failure
@@ -80,7 +72,7 @@ jobs:
         run: |
           mkdir -p evidence
           cat > evidence/IE6-FAILURE-INJECTION.md <<EOF
-          # 🚨 IE6 — Evidencia de Interrupción del Pipeline
+          # IE6 - Evidencia de interrupcion del pipeline
 
           **Fecha:** $(date -u +"%Y-%m-%dT%H:%M:%SZ")
           **Workflow:** ${{ github.workflow }}
@@ -123,12 +115,7 @@ jobs:
 
       - name: Resumen final
         run: |
-          echo "============================================"
-          echo "  ✅ IE6 DEMO COMPLETADA"
-          echo "============================================"
-          echo ""
-          echo "El pipeline se detuvo en security-snyk."
+          echo "Demo IE6 completada: el pipeline se detuvo en security-snyk."
           echo "Los jobs posteriores (validation-gate, build-docker,"
           echo "despliegue-simulado, deploy-ec2) no se ejecutaron."
-          echo ""
           echo "Cerrar el PR y eliminar la rama temporal."

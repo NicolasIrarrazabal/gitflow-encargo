@@ -1,13 +1,4 @@
-# ============================================================
-# IE3 — Prometheus: configuración de scrape
-# ============================================================
-# Scrape targets:
-#   - prometheus itself (métricas internas)
-#   - microservicio-auth (vía /actuator/prometheus)
-#
-# En Kubernetes, los pods anotados con `prometheus.io/scrape: "true"`
-# son auto-descubiertos por el Prometheus Operator. Esta config
-# funciona como referencia para despliegues locales / kind.
+# IE3: scrape config de Prometheus para si mismo y el microservicio-auth.
 
 global:
   scrape_interval: 15s
@@ -16,9 +7,6 @@ global:
     monitor: "gitflow-encargo-prometheus"
     environment: "production"
 
-# ============================================================
-# Scrape configs
-# ============================================================
 scrape_configs:
   # Métricas del propio Prometheus
   - job_name: "prometheus"
@@ -30,11 +18,10 @@ scrape_configs:
     metrics_path: "/actuator/prometheus"
     scheme: "http"
     static_configs:
-      # Target dentro del cluster K8s (Service ClusterIP)
-      - targets: ["microservicio-auth.microservicio-prod.svc:80"]
+      # Target del contenedor en docker-compose
+      - targets: ["microservicio-auth:8080"]
         labels:
           app: "microservicio-auth"
-          namespace: "microservicio-prod"
           component: "auth-api"
 
   # Cuando se ejecuta localmente con docker-compose, el target es:

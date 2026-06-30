@@ -1,34 +1,21 @@
-# ============================================================
-# CODEOWNERS — Evaluación Parcial N°3 (IE5)
-# ============================================================
-# Asigna revisores automáticos a cada PR según la carpeta modificada.
-# Combinado con branch protection rules en GitHub, garantiza que
-# ningún cambio mergea a main sin revisión de un OWNER.
+# Asigna revisores automáticos por carpeta. Junto con branch
+# protection, evita que algo llegue a main sin pasar por @NicolasIrarrazabal.
 
-# Owners por defecto (todo el repo)
 *       @NicolasIrarrazabal
 
-# Código fuente del microservicio — requiere review de owner principal
-/src/main/              @NicolasIrarrazabal
-/src/test/               @NicolasIrarrazabal
+/src/main/               @NicolasIrarrazabal
+/src/test/                @NicolasIrarrazabal
 
-# Pipeline CI/CD — cambios críticos requieren review adicional
-/.github/workflows/     @NicolasIrarrazabal
-/.github/CODEOWNERS      @NicolasIrarrazabal
+/.github/workflows/      @NicolasIrarrazabal
+/.github/CODEOWNERS       @NicolasIrarrazabal
 
-# Despliegue en AWS EC2 (workflow deploy-ec2, Dockerfile) — cambios de infraestructura
+/observability/           @NicolasIrarrazabal
 
-# Stack de observabilidad (dashboards, alertas)
-/observability/          @NicolasIrarrazabal
+/scripts/                 @NicolasIrarrazabal
 
-# Scripts de auditoría y compliance
-/scripts/                @NicolasIrarrazabal
+/docs/                    @NicolasIrarrazabal
+/README.md                @NicolasIrarrazabal
 
-# Documentación
-/docs/                   @NicolasIrarrazabal
-/README.md               @NicolasIrarrazabal
-
-# Configuración de build
-/pom.xml                 @NicolasIrarrazabal
-/Dockerfile              @NicolasIrarrazabal
-/docker-compose.yml      @NicolasIrarrazabal
+/pom.xml                  @NicolasIrarrazabal
+/Dockerfile               @NicolasIrarrazabal
+/docker-compose.yml       @NicolasIrarrazabal

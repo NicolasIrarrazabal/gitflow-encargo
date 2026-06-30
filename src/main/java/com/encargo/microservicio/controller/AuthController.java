@@ -13,11 +13,8 @@ import org.springframework.web.bind.annotation.*;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Controlador de autenticación.
- * Expone los endpoints de login y health check del microservicio.
- *
- * IE1 — Instrumentado con Micrometer (contadores + timer) para
- * observabilidad vía Prometheus / CloudWatch.
+ * Controlador de autenticación. Expone login y un health check propio.
+ * Instrumentado con Micrometer para IE1 (Prometheus/CloudWatch).
  */
 @RestController
 @RequestMapping("/auth")
@@ -44,14 +41,8 @@ public class AuthController {
     }
 
     /**
-     * POST /auth/login
-     * Recibe las credenciales del usuario y retorna un token si son válidas.
-     * Si las credenciales son incorrectas, responde con 401 Unauthorized.
-     *
-     * Métricas emitidas:
-     *   - auth.login.attempts{result=success|failure}  (Counter)
-     *   - auth.login.duration                          (Timer)
-     *   - auth.tokens.issued                           (Counter)
+     * Recibe credenciales y retorna un token si son válidas, 401 si no.
+     * Emite auth.login.attempts, auth.login.duration y auth.tokens.issued.
      */
     @PostMapping("/login")
     public ResponseEntity<String> login(@Valid @RequestBody Usuario usuario) {
@@ -75,9 +66,7 @@ public class AuthController {
     }
 
     /**
-     * GET /auth/health
-     * Endpoint usado por Docker y el pipeline para verificar que el servicio está vivo.
-     * (K8s livenessProbe / readinessProbe también consultan /actuator/health)
+     * Usado por Docker/el pipeline para chequear que el servicio está vivo.
      */
     @GetMapping("/health")
     public ResponseEntity<String> health() {

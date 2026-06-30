@@ -7,17 +7,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Configuración de métricas custom (Evaluación Parcial N°3 — IE1).
- *
- * Define contadores y timers específicos del dominio del microservicio
- * de autenticación. Estas métricas se exportan a:
- *   - Prometheus (vía /actuator/prometheus)
- *   - AWS CloudWatch Metrics (vía Micrometer CloudWatch registry)
- *
- * Permiten responder preguntas como:
- *   - ¿Cuántos logins exitosos/fallidos hubo en los últimos 5 min?
- *   - ¿Cuál es la latencia p95 de /auth/login?
- *   - ¿Cuántos tokens se han generado?
+ * Métricas custom del microservicio de auth (IE1).
+ * Se exportan vía Micrometer a Prometheus (/actuator/prometheus) y
+ * a AWS CloudWatch.
  */
 @Configuration
 public class MetricsConfig {

@@ -1,7 +1,5 @@
 #!/bin/bash
-# ============================================================
 # IE6 — Script de inyección de fallas (para demo IE6)
-# ============================================================
 #
 # Este script NO se ejecuta en el pipeline principal. Se usa
 # desde el workflow `failure-injection.yml` para demostrar

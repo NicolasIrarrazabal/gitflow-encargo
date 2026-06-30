@@ -4,9 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <!-- ============================================================ -->
-    <!-- Proyecto base: Spring Boot 3.5.15                            -->
-    <!-- ============================================================ -->
+    <!-- Proyecto base: Spring Boot 3.5.15 -->
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
@@ -26,9 +24,7 @@
         <netty.version>4.1.135.Final</netty.version>
     </properties>
 
-    <!-- ============================================================ -->
-    <!-- Gestión de versiones para dependencias transitivas con CVEs  -->
-    <!-- ============================================================ -->
+    <!-- Pin de versiones para dependencias transitivas con CVEs conocidas -->
     <dependencyManagement>
         <dependencies>
 
@@ -57,9 +53,6 @@
         </dependencies>
     </dependencyManagement>
 
-    <!-- ============================================================ -->
-    <!-- Dependencias                                                  -->
-    <!-- ============================================================ -->
     <dependencies>
 
         <!-- API REST -->
@@ -74,9 +67,7 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
-        <!-- ============================================================ -->
-        <!-- IE1 — Observabilidad (Evaluación Parcial N°3)               -->
-        <!-- ============================================================ -->
+        <!-- IE1: observabilidad -->
 
         <!-- Micrometer: fachada de métricas compatible con Spring Boot Actuator -->
         <dependency>
@@ -140,9 +131,7 @@
 
     </dependencies>
 
-    <!-- ============================================================ -->
     <!-- Build y Plugins                                               -->
-    <!-- ============================================================ -->
     <build>
         <plugins>
 

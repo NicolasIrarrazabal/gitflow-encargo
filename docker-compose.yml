@@ -1,22 +1,7 @@
-# ============================================================
-# docker-compose.yml — Evaluación Parcial N°3 (Stack completo)
-# ============================================================
-#
-# Servicios:
-#   - microservicio-auth: la aplicación Spring Boot
-#   - prometheus:         scrape de /actuator/prometheus
-#   - grafana:            dashboards en /etc/grafana/dashboards
-#
-# Notas:
-#   - Las imágenes están pinned por SHA/tag para trazabilidad
-#   - Los volúmenes se nombran para persistencia local
-#   - Healthchecks verifican disponibilidad antes de dependencias
-#
+# Stack completo: microservicio-auth (Spring Boot), prometheus
+# (scrape de /actuator/prometheus) y grafana (dashboards).
 services:
 
-  # ============================================================
-  # Microservicio de autenticación
-  # ============================================================
   microservicio-auth:
     build: .
     image: microservicio-auth:local
@@ -41,9 +26,6 @@ services:
     networks:
       - observability-net
 
-  # ============================================================
-  # Prometheus — scrape de métricas
-  # ============================================================
   prometheus:
     image: prom/prometheus:v2.51.0
     container_name: prometheus
@@ -52,7 +34,6 @@ services:
       - "9090:9090"
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus-data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -65,9 +46,6 @@ services:
     networks:
       - observability-net
 
-  # ============================================================
-  # Grafana — visualización de métricas
-  # ============================================================
   grafana:
     image: grafana/grafana:10.4.0
     container_name: grafana
@@ -88,16 +66,10 @@ services:
     networks:
       - observability-net
 
-# ============================================================
-# Networks
-# ============================================================
 networks:
   observability-net:
     driver: bridge
 
-# ============================================================
-# Volumes (persistencia)
-# ============================================================
 volumes:
   prometheus-data:
   grafana-data:
