@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ============================================================ -->
+<!-- Logback — Evaluación Parcial N°3 (IE1)                      -->
+<!--                                                             -->
+<!-- Configura dos appenders:                                    -->
+<!--   1. CONSOLE: appender estándar en texto plano (legible)    -->
+<!--   2. JSON_FILE: logs estructurados en formato JSON          -->
+<!--      (compatibles con CloudWatch Logs / Loki / ELK)         -->
+<!-- ============================================================ -->
+<configuration>
+
+    <!-- Hereda de la configuración por defecto de Spring Boot -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- ============================================================ -->
+    <!-- APPENDER 1: Consola (texto plano, desarrollo)              -->
+    <!-- ============================================================ -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- ============================================================ -->
+    <!-- APPENDER 2: Archivo JSON (producción / observabilidad)      -->
+    <!-- ============================================================ -->
+    <!-- Cada línea es un objeto JSON con timestamp, nivel,          -->
+    <!-- logger, mensaje y MDC. Ideal para ingesta en CloudWatch     -->
+    <!-- Logs, Loki, Elasticsearch, etc.                            -->
+    <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/microservicio-auth.json</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/microservicio-auth.%d{yyyy-MM-dd}.json</fileNamePattern>
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdcKeyName>traceId</includeMdcKeyName>
+            <includeMdcKeyName>spanId</includeMdcKeyName>
+            <customFields>{"service":"microservicio-auth"}</customFields>
+        </encoder>
+    </appender>
+
+    <!-- ============================================================ -->
+    <!-- Niveles de log por paquete                                  -->
+    <!-- ============================================================ -->
+    <logger name="com.encargo.microservicio" level="INFO"/>
+    <logger name="org.springframework" level="INFO"/>
+    <logger name="io.micrometer" level="INFO"/>
+
+    <!-- ============================================================ -->
+    <!-- Root logger: envía a CONSOLE (siempre) y JSON_FILE          -->
+    <!-- ============================================================ -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="JSON_FILE"/>
+    </root>
+
+</configuration>

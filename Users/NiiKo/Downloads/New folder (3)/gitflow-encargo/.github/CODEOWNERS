@@ -1,0 +1,35 @@
+# ============================================================
+# CODEOWNERS — Evaluación Parcial N°3 (IE5)
+# ============================================================
+# Asigna revisores automáticos a cada PR según la carpeta modificada.
+# Combinado con branch protection rules en GitHub, garantiza que
+# ningún cambio mergea a main sin revisión de un OWNER.
+
+# Owners por defecto (todo el repo)
+*       @tu-usuario
+
+# Código fuente del microservicio — requiere review de owner principal
+/src/main/              @tu-usuario
+/src/test/               @tu-usuario
+
+# Pipeline CI/CD — cambios críticos requieren review adicional
+/.github/workflows/     @tu-usuario
+/.github/CODEOWNERS      @tu-usuario
+
+# Manifiestos Kubernetes — cambios de infraestructura
+/k8s/                    @tu-usuario
+
+# Stack de observabilidad (dashboards, alertas)
+/observability/          @tu-usuario
+
+# Scripts de auditoría y compliance
+/scripts/                @tu-usuario
+
+# Documentación
+/docs/                   @tu-usuario
+/README.md               @tu-usuario
+
+# Configuración de build
+/pom.xml                 @tu-usuario
+/Dockerfile              @tu-usuario
+/docker-compose.yml      @tu-usuario

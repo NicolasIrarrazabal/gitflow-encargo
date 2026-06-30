@@ -1,0 +1,134 @@
+name: Failure Injection Demo (IE6)
+
+# ============================================================
+# IE6 — Demostración de que el pipeline se DETIENE
+# ============================================================
+# Inyecta una vulnerabilidad conocida (CVE-2022-22965 -
+# Spring4Shell) en pom.xml y demuestra que el job `security-snyk`
+# falla, lo que bloquea `validation-gate` y por extensión
+# `build-docker`, `despliegue-simulado` y `deploy-ec2`.
+#
+# Solo se ejecuta manualmente (workflow_dispatch) para no
+# contaminar la rama main.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  # ============================================================
+  # JOB 1: Inyectar falla en una rama temporal
+  # ============================================================
+  inject-failure:
+    name: Inyectar Falla
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código base
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Crear rama temporal
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          BRANCH="failure-injection-demo/${{ github.run_id }}"
+          git checkout -b "$BRANCH"
+          echo "BRANCH_NAME=$BRANCH" >> $GITHUB_ENV
+
+      - name: Inyectar spring-core 5.3.17 (CVE-2022-22965)
+        run: |
+          chmod +x scripts/inject-failure.sh
+          ./scripts/inject-failure.sh inject
+          git add pom.xml
+          git commit -m "demo: inyectar spring-core 5.3.17 (CVE-2022-22965) para IE6"
+
+      - name: Push de la rama con falla
+        run: git push origin "$BRANCH_NAME"
+
+      - name: Crear Pull Request
+        uses: actions/pull-request@v1
+        with:
+          title: "[IE6 DEMO] Vulnerable dependency inyectada (CVE-2022-22965)"
+          head: ${{ env.BRANCH_NAME }}
+          branch: main
+          body: |
+            ## 🚨 DEMO IE6 — Failure Injection
+
+            Este PR **NO debe mergearse a main**. Se creó para demostrar
+            que el pipeline se detiene ante una vulnerabilidad crítica.
+
+            **Falla inyectada:** `spring-core 5.3.17` (CVE-2022-22965 - Spring4Shell)
+
+            Comportamiento esperado:
+            1. El job `security-snyk` falla (Snyk detecta CVE-2022-22965)
+            2. El job `validation-gate` no se ejecuta
+            3. Los jobs `build-docker`, `despliegue-simulado` y `deploy-ec2` no se ejecutan
+            4. El PR **no puede mergearse** a main (branch protection lo bloquea)
+
+            Cierra este PR sin mergear después de capturar la evidencia.
+
+  # ============================================================
+  # JOB 2: Documentar evidencia (corre solo si inject-failure falló)
+  # ============================================================
+  capture-evidence:
+    name: Capturar Evidencia
+    needs: inject-failure
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Documentar evidencia
+        run: |
+          mkdir -p evidence
+          cat > evidence/IE6-FAILURE-INJECTION.md <<EOF
+          # 🚨 IE6 — Evidencia de Interrupción del Pipeline
+
+          **Fecha:** $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          **Workflow:** ${{ github.workflow }}
+          **Run ID:** ${{ github.run_id }}
+
+          ## Falla inyectada
+
+          Se agregó \`spring-core 5.3.17\` a \`pom.xml\` para introducir
+          la vulnerabilidad **CVE-2022-22965** (Spring4Shell).
+
+          ## Resultado esperado
+
+          | Job | Estado esperado | Razón |
+          |---|---|---|
+          | security-snyk | ❌ FAILED | Snyk detecta CVE-2022-22965 con --fail-on=all |
+          | validation-gate | ⏸️ SKIPPED | Depende de security-snyk (falló) |
+          | build-docker | ⏸️ SKIPPED | Depende de validation-gate |
+          | despliegue-simulado | ⏸️ SKIPPED | Depende de build-docker |
+          | deploy-ec2 | ⏸️ SKIPPED | Depende de build-docker |
+
+          ## Verificación
+
+          1. Actions → run triggered por este PR
+          2. Confirmar que `security-snyk` aparece en rojo
+          3. Confirmar que los jobs posteriores están en gris (skipped)
+          4. El PR muestra "Checks failed" y no permite merge
+
+          ## Limpieza
+
+          - Cerrar el PR sin mergear
+          - Eliminar la rama \`failure-injection-demo/*\`
+          - Verificar que main no fue modificada
+          EOF
+
+      - name: Subir evidencia
+        uses: actions/upload-artifact@v4
+        with:
+          name: ie6-failure-evidence
+          path: evidence/
+
+      - name: Resumen final
+        run: |
+          echo "============================================"
+          echo "  ✅ IE6 DEMO COMPLETADA"
+          echo "============================================"
+          echo ""
+          echo "El pipeline se detuvo en security-snyk."
+          echo "Los jobs posteriores (validation-gate, build-docker,"
+          echo "despliegue-simulado, deploy-ec2) no se ejecutaron."
+          echo ""
+          echo "Cerrar el PR y eliminar la rama temporal."

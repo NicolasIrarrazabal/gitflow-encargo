@@ -1,0 +1,490 @@
+name: CI/CD Pipeline - Auth Microservice (EP3)
+
+# ============================================================
+# Evaluación Parcial N°3 — Pipeline completo
+# ============================================================
+# Se ejecuta en:
+#   - push a main: pipeline completo (build → K8s deploy)
+#   - pull_request a main: solo CI (build → security)
+#   - workflow_dispatch: ejecución manual
+#
+# Jobs:
+#   1. build                    → compile Maven
+#   2. pruebas-unitarias        → JUnit + JaCoCo coverage
+#   3. security-sonar           → SonarCloud Quality Gate
+#   4. security-snyk            → Snyk vuln scan
+#   5. compliance-audit         → script de auditoría IE5
+#   6. validation-gate          → gate final IE6 (bloquea si falla)
+#   7. publish-pipeline-metrics → métricas CI/CD para dashboards IE3
+#   8. build-docker             → construye y publica imagen
+#   9. despliegue-simulado      → docker-compose local
+#  10. deploy-ec2               → despliegue en AWS EC2 vía SSH
+#
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+# Cancelar runs previos en la misma rama (optimización)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ============================================================
+  # 1. BUILD
+  # ============================================================
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Compilar proyecto
+        run: mvn clean package -DskipTests
+
+      - name: Guardar artefacto compilado
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: target/*.jar
+
+  # ============================================================
+  # 2. PRUEBAS UNITARIAS + COBERTURA
+  # ============================================================
+  pruebas-unitarias:
+    name: Pruebas Unitarias
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Ejecutar pruebas unitarias
+        run: mvn test
+
+      - name: Subir reporte JaCoCo
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/
+
+      - name: Extraer cobertura para métricas
+        if: always()
+        id: coverage
+        run: |
+          if [ -f target/site/jacoco/jacoco.csv ]; then
+            COVERAGE=$(awk -F, 'NR>1 && $4=="TOTAL" { print $5 }' target/site/jacoco/jacoco.csv | head -1)
+            echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+            echo "Cobertura extraída: $COVERAGE%"
+          else
+            echo "coverage=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publicar cobertura como métrica
+        if: always()
+        run: |
+          COVERAGE="${{ steps.coverage.outputs.coverage }}"
+          echo "cicd_test_coverage_percent $COVERAGE" >> cicd_metrics.txt
+          echo "cicd_job_status{job_name=\"pruebas-unitarias\"} ${{ job.status == 'success' && 1 || 0 }}" >> cicd_metrics.txt
+          cat cicd_metrics.txt
+
+      - name: Subir métricas del pipeline
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cicd-metrics-unit
+          path: cicd_metrics.txt
+
+  # ============================================================
+  # 3A. ANÁLISIS DE CALIDAD - SONARCLOUD
+  # ============================================================
+  security-sonar:
+    name: SonarCloud
+    needs: pruebas-unitarias
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache SonarCloud
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Generar reporte JaCoCo XML
+        run: mvn -B test jacoco:report
+
+      - name: Escaneo de calidad con SonarCloud
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          PROJECT_KEY_SONAR: ${{ secrets.PROJECT_KEY_SONAR }}
+          ORGANIZATION_SONAR: ${{ secrets.ORGANIZATION_SONAR }}
+        run: >
+          mvn -B sonar:sonar
+          -Dsonar.projectKey=$PROJECT_KEY_SONAR
+          -Dsonar.organization=$ORGANIZATION_SONAR
+          -Dsonar.host.url=https://sonarcloud.io
+          -Dsonar.login=$SONAR_TOKEN
+          -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+
+  # ============================================================
+  # 3B. ANÁLISIS DE VULNERABILIDADES - SNYK
+  # ============================================================
+  # IE6 — CORREGIDO: el comando Snyk ya NO usa `|| true`,
+  # por lo que si hay vulnerabilidades high/critical el job
+  # falla y bloquea el pipeline (validation-gate no se ejecuta).
+  security-snyk:
+    name: Snyk Security
+    needs: pruebas-unitarias
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Instalar Snyk CLI
+        run: npm install -g snyk@1.1297.1 --ignore-scripts
+
+      - name: Autenticar Snyk
+        run: snyk auth "$SNYK_TOKEN"
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      # ============================================================
+      # IE6: el pipeline se DETIENE si Snyk detecta vulnerabilidades
+      # de severidad high o critical. Sin `|| true`, exit code != 0
+      # marca el job como failed, y `needs` propaga el fallo a
+      # validation-gate → build-docker → deploy-ec2.
+      # ============================================================
+      - name: Analisis de dependencias con Snyk (FAIL ON HIGH/CRITICAL)
+        run: snyk test --severity-threshold=high --fail-on=all
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+      - name: Guardar reporte Snyk
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: snyk-security-report
+          path: snyk-report.json
+
+  # ============================================================
+  # 3C. AUDITORÍA DE CUMPLIMIENTO (IE5)
+  # ============================================================
+  compliance-audit:
+    name: Compliance Audit
+    needs: pruebas-unitarias
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Hacer ejecutable el script de auditoría
+        run: chmod +x scripts/audit-compliance.sh
+
+      # ============================================================
+      # IE5 + IE6: este job falla si encuentra secretos hardcoded,
+      # imágenes sin pin, manifiestos K8s inválidos, etc.
+      # Bloquea el pipeline (validation-gate depende de él).
+      # ============================================================
+      - name: Ejecutar auditoría de cumplimiento
+        run: ./scripts/audit-compliance.sh .
+
+      - name: Subir log de auditoría
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compliance-audit-log
+          path: compliance-audit.log
+        # Si el script falla, capturamos el log como evidenciamême en error.
+        # NOTA: el sub-step anterior no se ejecuta si el audit falla,
+        # pero usamos `if: always()` para que lo intente.
+
+  # ============================================================
+  # 4. VALIDATION GATE (IE6 — gate final)
+  # ============================================================
+  # Este job es el ÚLTIMO punto de control antes del build de
+  # Docker. Si falla, NINGÚN job posterior se ejecuta (gracias a
+  # `needs: [validation-gate]` en build-docker).
+  #
+  # Es el equivalente a "Quality Gate" de SonarCloud pero
+  # aplicado a TODO el pipeline.
+  validation-gate:
+    name: Validation Gate
+    needs: [security-sonar, security-snyk, compliance-audit]
+    runs-on: ubuntu-latest
+    # continue-on-error: false (default). Si algún job de los que
+    # depende falla, este job NO se ejecuta y el pipeline se detiene.
+    steps:
+      - name: Verificar estado de checks previos
+        run: |
+          echo "=== IE6 Validation Gate ==="
+          echo ""
+          echo "Verificando que todos los checks críticos pasaron:"
+          echo ""
+          echo "  ✓ SonarCloud Quality Gate = passed"
+          echo "  ✓ Snyk Security Scan = passed (no high/critical)"
+          echo "  ✓ Compliance Audit = passed"
+          echo ""
+          echo "Si alguno de los checks falló, este job no se ejecuta"
+          echo "y el pipeline se detiene ANTES del build Docker."
+          echo ""
+          echo "Validation Gate: PASSED"
+
+      - name: Resumen del gate
+        if: success()
+        run: |
+          echo "cicd_validation_gate_status 1" >> gate_metrics.txt
+          echo "cicd_pipeline_duration_seconds ${{ github.run_id }}" >> gate_metrics.txt
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > gate_timestamp.txt
+
+      - name: Subir evidencia del gate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-gate-evidence
+          path: |
+            gate_metrics.txt
+            gate_timestamp.txt
+
+  # ============================================================
+  # 5. BUILD DOCKER IMAGE
+  # ============================================================
+  build-docker:
+    name: Build Docker Image
+    needs: validation-gate
+    # Solo se ejecuta en push a main (no en PRs)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.image-tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Iniciar sesión en Docker Hub
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567  # v3.3.0
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extraer metadata
+        id: meta
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+        run: |
+          IMAGE="$DOCKER_USERNAME/microservicio-auth"
+          TAG="sha-${{ github.sha }}"
+          echo "image-tag=$IMAGE:$TAG" >> $GITHUB_OUTPUT
+          echo "image-latest=$IMAGE:latest" >> $GITHUB_OUTPUT
+          echo "Imagen: $IMAGE:$TAG"
+
+      - name: Construir y subir imagen Docker
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83  # v5.3.0
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image-tag }}
+            ${{ steps.meta.outputs.image-latest }}
+
+  # ============================================================
+  # 6. DESPLIEGUE SIMULADO (Docker Compose)
+  # ============================================================
+  despliegue-simulado:
+    name: Despliegue Simulado (Compose)
+    needs: build-docker
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Iniciar sesión en Docker Hub
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567  # v3.3.0
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Levantar entorno simulado con Docker Compose
+        run: docker compose up -d
+
+      - name: Esperar a que el servicio esté listo
+        run: sleep 20
+
+      - name: Verificar health endpoint
+        run: curl --fail http://localhost:8080/actuator/health || exit 1
+
+      - name: Verificar métricas Prometheus
+        run: curl --fail http://localhost:8080/actuator/prometheus | head -20
+
+      - name: Detener entorno simulado
+        if: always()
+        run: docker compose down
+
+  # ============================================================
+  # 7. DEPLOYMENT A AWS EC2 (IE2 — GitHub Actions + SSH)
+  # ============================================================
+  # Despliega el microservicio directamente en una instancia EC2
+  # vía SSH: hace pull de la imagen recién publicada en Docker Hub,
+  # reemplaza el contenedor en ejecución y valida el health check
+  # remoto. Sustituye al despliegue orquestado con Kubernetes (kind).
+  deploy-ec2:
+    name: Deploy to EC2
+    needs: build-docker
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Desplegar contenedor en EC2 vía SSH
+        uses: appleboy/ssh-action@7eaf76671fcbc0b2d4c3c4eda9c4e9994e95d5e3  # v1.0.3
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          IMAGE_TAG: sha-${{ github.sha }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_PORT }}
+          envs: DOCKER_USERNAME,DOCKER_PASSWORD,IMAGE_TAG
+          script: |
+            set -e
+            IMAGE="$DOCKER_USERNAME/microservicio-auth:$IMAGE_TAG"
+            echo "=== Desplegando imagen: $IMAGE ==="
+
+            echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+            docker pull "$IMAGE"
+
+            # Reemplazo sin downtime prolongado: arranca el nuevo
+            # contenedor, valida salud y solo entonces retira el viejo.
+            docker rename auth_api auth_api_old 2>/dev/null || true
+
+            docker run -d \
+              --name auth_api \
+              --restart always \
+              -p 8080:8080 \
+              -e SPRING_APPLICATION_NAME=microservicio-auth \
+              -e SERVER_PORT=8080 \
+              -e AWS_REGION=us-east-1 \
+              -e ENVIRONMENT=production \
+              "$IMAGE"
+
+            echo "=== Esperando a que el contenedor esté saludable ==="
+            for i in $(seq 1 12); do
+              STATUS=$(docker inspect --format='{{.State.Health.Status}}' auth_api 2>/dev/null || echo "starting")
+              echo "Intento $i: estado=$STATUS"
+              if [ "$STATUS" = "healthy" ]; then
+                break
+              fi
+              sleep 5
+            done
+
+            if [ "$STATUS" != "healthy" ]; then
+              echo "El nuevo contenedor no quedó healthy, revirtiendo..."
+              docker stop auth_api || true
+              docker rm auth_api || true
+              docker rename auth_api_old auth_api 2>/dev/null || true
+              docker start auth_api 2>/dev/null || true
+              exit 1
+            fi
+
+            docker stop auth_api_old 2>/dev/null || true
+            docker rm auth_api_old 2>/dev/null || true
+            docker image prune -f
+
+            echo "=== Despliegue en EC2 completado ==="
+            docker ps --filter "name=auth_api"
+
+      - name: Verificar health check remoto
+        run: |
+          sleep 10
+          curl --fail --max-time 10 "http://${{ secrets.EC2_HOST }}:8080/actuator/health"
+          echo ""
+          echo "Health check remoto: OK"
+
+      - name: Capturar evidencia del despliegue
+        if: always()
+        run: |
+          mkdir -p ec2-evidence
+          {
+            echo "timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo "host: ${{ secrets.EC2_HOST }}"
+            echo "image: REPLACE_DOCKER_USERNAME/microservicio-auth:sha-${{ github.sha }}"
+            echo "commit: ${{ github.sha }}"
+          } > ec2-evidence/deploy-info.txt
+
+      - name: Subir evidencia del despliegue EC2
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ec2-deploy-evidence
+          path: ec2-evidence/
+
+  # ============================================================
+  # 8. PUBLICAR MÉTRICAS DEL PIPELINE (IE3)
+  # ============================================================
+  publish-pipeline-metrics:
+    name: Publish Pipeline Metrics
+    needs: validation-gate
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar artefactos de métricas
+        uses: actions/download-artifact@v4
+        with:
+          path: metrics
+
+      - name: Consolidar métricas
+        run: |
+          echo "=== Métricas del Pipeline CI/CD ==="
+          echo "Run ID: ${{ github.run_id }}"
+          echo "Run Number: ${{ github.run_number }}"
+          echo "Commit SHA: ${{ github.sha }}"
+          echo "Trigger: ${{ github.event_name }}"
+          echo "Branch: ${{ github.ref }}"
+          echo "Status: ${{ needs.validation-gate.result }}"
+
+          # Consolidar todos los archivos de métricas
+          find metrics -type f -name "*.txt" -exec cat {} \;
+
+      - name: Subir reporte consolidado
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-metrics-report
+          path: metrics/

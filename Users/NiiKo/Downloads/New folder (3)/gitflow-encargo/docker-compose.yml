@@ -1,0 +1,103 @@
+# ============================================================
+# docker-compose.yml — Evaluación Parcial N°3 (Stack completo)
+# ============================================================
+#
+# Servicios:
+#   - microservicio-auth: la aplicación Spring Boot
+#   - prometheus:         scrape de /actuator/prometheus
+#   - grafana:            dashboards en /etc/grafana/dashboards
+#
+# Notas:
+#   - Las imágenes están pinned por SHA/tag para trazabilidad
+#   - Los volúmenes se nombran para persistencia local
+#   - Healthchecks verifican disponibilidad antes de dependencias
+#
+services:
+
+  # ============================================================
+  # Microservicio de autenticación
+  # ============================================================
+  microservicio-auth:
+    build: .
+    image: microservicio-auth:local
+    container_name: auth_api
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_APPLICATION_NAME: microservicio-auth
+      SERVER_PORT: 8080
+      # CloudWatch: en local queda deshabilitado, las métricas
+      # se observan vía Prometheus + Grafana
+      AWS_REGION: us-east-1
+      CLOUDWATCH_LOGS_ENABLED: "false"
+      ENVIRONMENT: local
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - observability-net
+
+  # ============================================================
+  # Prometheus — scrape de métricas
+  # ============================================================
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+    depends_on:
+      microservicio-auth:
+        condition: service_healthy
+    networks:
+      - observability-net
+
+  # ============================================================
+  # Grafana — visualización de métricas
+  # ============================================================
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./observability/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./observability/grafana/dashboards/provider.yml:/etc/grafana/provisioning/dashboards/provider.yml:ro
+      - ./observability/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - observability-net
+
+# ============================================================
+# Networks
+# ============================================================
+networks:
+  observability-net:
+    driver: bridge
+
+# ============================================================
+# Volumes (persistencia)
+# ============================================================
+volumes:
+  prometheus-data:
+  grafana-data:

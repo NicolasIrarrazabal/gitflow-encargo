@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- ============================================================ -->
+    <!-- Proyecto base: Spring Boot 3.5.15                            -->
+    <!-- ============================================================ -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.15</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.encargo</groupId>
+    <artifactId>microservicio</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>microservicio-auth</name>
+    <description>Microservicio de autenticación — Evaluación Parcial N°2 DOY0101</description>
+
+    <properties>
+        <java.version>21</java.version>
+        <!-- Fuerza Netty seguro (CVEs en 4.1.122.Final vía AWS SDK) -->
+        <netty.version>4.1.135.Final</netty.version>
+    </properties>
+
+    <!-- ============================================================ -->
+    <!-- Gestión de versiones para dependencias transitivas con CVEs  -->
+    <!-- ============================================================ -->
+    <dependencyManagement>
+        <dependencies>
+
+            <!-- Micrometer: fuerza versión parcheada (SNYK-JAVA-IOMICROMETER-17260885) -->
+            <dependency>
+                <groupId>io.micrometer</groupId>
+                <artifactId>micrometer-bom</artifactId>
+                <version>1.15.12</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Jackson: fuerza versión segura para CVEs en jackson-core@2.19.1      -->
+            <!-- introducidos transitivamente por logstash-logback-encoder@8.1        -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-core</artifactId>
+                <version>2.21.2</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>2.21.2</version>
+            </dependency>
+
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- ============================================================ -->
+    <!-- Dependencias                                                  -->
+    <!-- ============================================================ -->
+    <dependencies>
+
+        <!-- API REST -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- Endpoints de salud y métricas (/actuator/health, /actuator/prometheus) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- ============================================================ -->
+        <!-- IE1 — Observabilidad (Evaluación Parcial N°3)               -->
+        <!-- ============================================================ -->
+
+        <!-- Micrometer: fachada de métricas compatible con Spring Boot Actuator -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
+        <!-- AWS CloudWatch: exporta métricas JVM/APP a CloudWatch Metrics -->
+        <!-- Usa SDK v2 (cloudwatch2); Netty forzado a 4.1.135.Final via <properties> -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-cloudwatch2</artifactId>
+        </dependency>
+
+        <!-- Logback JSON encoder: logs estructurados (compatibles con CloudWatch Logs Insights) -->
+        <!-- jackson-databind excluido para que Spring Boot BOM resuelva la versión    -->
+        <!-- segura de jackson-core (CVEs SNYK-JAVA-COMFASTERXMLJACKSONCORE-15365924  -->
+        <!-- y SNYK-JAVA-COMFASTERXMLJACKSONCORE-15907551)                            -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>8.1</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-core</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- Validación de modelos (@NotBlank, @NotNull, etc.) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- Lombok: elimina código boilerplate (getters, setters, constructores) -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Testing: JUnit + AssertJ incluidos por Spring Boot Test -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Mockito: mocks e inyección de dependencias en pruebas unitarias -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <!-- ============================================================ -->
+    <!-- Build y Plugins                                               -->
+    <!-- ============================================================ -->
+    <build>
+        <plugins>
+
+            <!-- Spring Boot Maven Plugin: empaqueta el JAR ejecutable -->
+            <!-- Excluye Lombok del artefacto final (solo se necesita en compilación) -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+
+            <!-- JaCoCo: cobertura de código -->
+            <!-- Umbral mínimo: 70% líneas / 60% ramas -->
+            <!-- El build falla si no se alcanza el umbral -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <executions>
+
+                    <!-- 1. Instrumenta el agente antes de correr los tests -->
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+
+                    <!-- 2. Genera reporte HTML en target/site/jacoco/index.html -->
+                    <execution>
+                        <id>report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+
+                    <!-- 3. Bloquea el build si la cobertura cae bajo el umbral -->
+                    <execution>
+                        <id>check-coverage</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <!-- Mínimo 70% de líneas cubiertas -->
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.70</minimum>
+                                        </limit>
+                                        <!-- Mínimo 60% de ramas cubiertas -->
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.60</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
+                    </execution>
+
+                </executions>
+            </plugin>
+
+        </plugins>
+    </build>
+
+</project>
