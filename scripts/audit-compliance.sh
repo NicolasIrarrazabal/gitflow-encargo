@@ -5,7 +5,7 @@
 #
 # Verifica 3 categorías clave de cumplimiento:
 #   1. No secretos hardcoded (API keys, passwords, tokens)
-#   2. Manifiestos Kubernetes válidos (estructura + security)
+#   2. Configuración segura del contenedor de despliegue (Dockerfile/EC2)
 #   3. Cobertura mínima de tests JaCoCo en pom.xml
 #
 # Exit codes:
@@ -69,30 +69,37 @@ else
 fi
 
 # ============================================================
-# 2. Validación de manifiestos Kubernetes
+# 2. Validación de configuración segura de despliegue (Dockerfile/EC2)
 # ============================================================
-section "2. Validación de manifiestos Kubernetes"
+section "2. Validación de configuración segura de despliegue (Dockerfile/EC2)"
 
-K8S_FILES=$(find "$REPO_ROOT/k8s" -name "*.yaml" 2>/dev/null || true)
-if [ -n "$K8S_FILES" ]; then
-    for f in $K8S_FILES; do
-        if grep -q "^apiVersion:" "$f" && \
-           grep -q "^kind:" "$f" && \
-           grep -q "^metadata:" "$f"; then
-            print_ok "$f tiene estructura K8s válida"
-        else
-            print_fail "$f no tiene estructura K8s válida"
-        fi
-    done
-
-    # Verificar security context (no root)
-    if grep -r "runAsNonRoot: true" "$REPO_ROOT/k8s" 2>/dev/null | head -1; then
-        print_ok "Pods configuran runAsNonRoot: true"
+DOCKERFILE="$REPO_ROOT/Dockerfile"
+if [ -f "$DOCKERFILE" ]; then
+    if grep -q "^USER " "$DOCKERFILE"; then
+        print_ok "Dockerfile define un usuario sin privilegios (no root)"
     else
-        print_fail "No se encontró runAsNonRoot: true en los manifests"
+        print_fail "Dockerfile no define USER no-root para el contenedor"
+    fi
+
+    if grep -q "^HEALTHCHECK" "$DOCKERFILE"; then
+        print_ok "Dockerfile define HEALTHCHECK para el despliegue en EC2"
+    else
+        print_fail "Dockerfile no define HEALTHCHECK"
     fi
 else
-    print_info "No se encontraron manifiestos K8s"
+    print_info "No se encontró Dockerfile"
+fi
+
+# Verificar que el job deploy-ec2 no use credenciales hardcoded, solo secrets
+EC2_WORKFLOW="$REPO_ROOT/.github/workflows/ci-cd.yml"
+if [ -f "$EC2_WORKFLOW" ] && grep -q "deploy-ec2" "$EC2_WORKFLOW"; then
+    if grep -q "secrets.EC2_HOST" "$EC2_WORKFLOW" && grep -q "secrets.EC2_SSH_KEY" "$EC2_WORKFLOW"; then
+        print_ok "Despliegue a EC2 usa GitHub Secrets (host/credenciales no hardcoded)"
+    else
+        print_fail "Despliegue a EC2 no referencia secrets para host/credenciales"
+    fi
+else
+    print_info "No se encontró job deploy-ec2 en el workflow"
 fi
 
 # ============================================================

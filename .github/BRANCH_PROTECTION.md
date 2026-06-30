@@ -24,8 +24,8 @@ Las reglas se aplican en:
 ### 2. Require approvals
 - ✅ Activado — mínimo **1 reviewer**
 - **Code Owners:** la lista en `.github/CODEOWNERS` asigna automáticamente al
-  owner cuando se modifican archivos críticos (`.github/workflows/`, `k8s/`,
-  `observability/`, `src/main/`).
+  owner cuando se modifican archivos críticos (`.github/workflows/`,
+  `observability/`, `src/main/`, `Dockerfile`/`docker-compose.yml`).
 
 ### 3. Dismiss stale pull request approvals when new commits are pushed
 - ✅ Activado
@@ -54,7 +54,7 @@ Las reglas se aplican en:
   no pueden saltarse los checks (evita "privilege escalation").
 
 ### 7. Restrict who can push to matching branches
-- ✅ Activado — solo `tu-usuario` (admin) y el bot de GitHub Actions
+- ✅ Activado — solo `NicolasIrarrazabal` (admin) y el bot de GitHub Actions
 - **Justificación:** Impide que contribuidores externos hagan push directo.
 
 ### 8. Allow force pushes
@@ -67,7 +67,14 @@ Las reglas se aplican en:
 
 ---
 
-## 🔄 Flujo de protección
+## ☁️ Nota sobre el entorno de despliegue (IE2)
+
+El despliegue orquestado del microservicio se realiza en una instancia
+**AWS EC2**, gestionada vía SSH desde el job `deploy-ec2` del pipeline
+(`.github/workflows/ci-cd.yml`), incluyendo verificación de salud del
+contenedor y rollback automático si no queda `healthy` tras el despliegue.
+
+---
 
 ```
        Push a feature branch
@@ -96,7 +103,7 @@ Las reglas se aplican en:
        Squash and merge
               ↓
        CI/CD Pipeline corre
-       (build → tests → K8s deploy)
+       (build → tests → deploy EC2)
 ```
 
 ---
@@ -114,7 +121,7 @@ gh api \
   -f required_pull_request_reviews='{"dismiss_stale_reviews":true,"require_code_owner_reviews":true,"required_approving_review_count":1}' \
   -f enforce_admins=true \
   -f required_linear_history=true \
-  -F restrictions='{"users":["tu-usuario"]}'
+  -F restrictions='{"users":["NicolasIrarrazabal"]}'
 ```
 
 ---
