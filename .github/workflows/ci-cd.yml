@@ -391,9 +391,12 @@ jobs:
             echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
             docker pull "$IMAGE"
 
-            # Reemplazo sin downtime prolongado: arranca el nuevo
-            # contenedor, valida salud y solo entonces retira el viejo.
+            # Detiene el contenedor anterior (liberando el puerto 8080) antes
+            # de levantar el nuevo. Implica un breve corte de servicio, pero
+            # evita el conflicto de puerto al renombrar sin detener. Si el
+            # nuevo contenedor no queda healthy, se revierte al anterior.
             docker rename auth_api auth_api_old 2>/dev/null || true
+            docker stop auth_api_old 2>/dev/null || true
 
             docker run -d \
               --name auth_api \
