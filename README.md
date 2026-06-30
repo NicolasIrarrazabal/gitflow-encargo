@@ -3,7 +3,7 @@
 > **Evaluación Parcial N°3 · DOY0101 Ingeniería DevOps**
 > *Observabilidad y entornos reales en DevOps*
 > Extensión del pipeline CI/CD con monitoreo, métricas, dashboards,
-> Kubernetes y políticas de cumplimiento automatizadas.
+> AWS EC2 y políticas de cumplimiento automatizadas.
 
 ---
 
@@ -14,7 +14,7 @@
 - [Estructura del Repositorio](#estructura-del-repositorio)
 - [Arquitectura del Pipeline CI/CD](#arquitectura-del-pipeline-cicd)
 - [IE1 — Monitoreo con CloudWatch + Prometheus](#ie1--monitoreo-con-cloudwatch--prometheus)
-- [IE2 — Despliegue en Kubernetes (kind)](#ie2--despliegue-en-kubernetes-kind)
+- [IE2 — Despliegue en AWS EC2 (GitHub Actions)](#ie2--despliegue-en-aws-ec2-github-actions)
 - [IE3 — Dashboards con Grafana](#ie3--dashboards-con-grafana)
 - [IE4 — Documentación de Integración](#ie4--documentación-de-integración)
 - [IE5 — Políticas de Cumplimiento](#ie5--políticas-de-cumplimiento)
@@ -37,8 +37,8 @@ microservicio de autenticación (`microservicio-auth`), incluyendo:
 2. **Observabilidad** (Evaluación Parcial N°3 — IE1): instrumentación con
    Micrometer, exportación a Prometheus y AWS CloudWatch, logs JSON
    estructurados.
-3. **Despliegue orquestado** (IE2): manifiestos Kubernetes + cluster local
-   con `kind` ejecutándose dentro del pipeline.
+3. **Despliegue continuo** (IE2): despliegue automatizado directo a una
+   instancia AWS EC2 vía SSH, ejecutado desde el propio pipeline.
 4. **Dashboards** (IE3): Grafana con métricas de tiempo de despliegue,
    cobertura, CPU/memoria y errores.
 5. **Cumplimiento** (IE5): SonarCloud, Snyk, CODEOWNERS, branch protection
@@ -62,7 +62,7 @@ build → tests → ┬─ sonar ─┐
             ↓                     ↓
    ┌────────┴────────┐
    ↓                 ↓
-despliegue       deploy-k8s (kind)
+despliegue       deploy-ec2 (SSH)
 simulado
 (Compose)
 ```
@@ -78,7 +78,7 @@ simulado
 | Framework | Spring Boot | 3.4.3 | — |
 | Contenedor | Docker | multi-stage | IE2 |
 | Orquestación local | Docker Compose | 3.8 | IE2 |
-| Orquestación K8s | kind | 0.23.0 | **IE2** |
+| Despliegue Cloud | AWS EC2 + SSH | — | **IE2** |
 | CI/CD | GitHub Actions | — | IE6 |
 | Calidad de código | SonarCloud + JaCoCo | — | IE5 |
 | Seguridad deps | Snyk | 1.1297.1 | IE5 |
@@ -101,12 +101,6 @@ gitflow-encargo/
 │       ├── ci-cd.yml                       # Pipeline principal (todos los IE)
 │       ├── failure-injection.yml           # IE6 — demo de inyección de fallas
 │       └── cy.yml                          # Pipeline básico
-├── k8s/                                    # IE2 — manifiestos Kubernetes
-│   ├── namespace.yaml
-│   ├── configmap.yaml
-│   ├── deployment.yaml
-│   ├── service.yaml
-│   └── kustomization.yaml
 ├── observability/                          # IE1 + IE3 — stack de observabilidad
 │   ├── prometheus/
 │   │   ├── prometheus.yml
@@ -141,9 +135,6 @@ gitflow-encargo/
 
 ## Arquitectura del Pipeline CI/CD
 
-Para una vista detallada con diagramas, consultar
-[`docs/architecture.md`](docs/architecture.md).
-
 ```mermaid
 flowchart TB
     A[Build Maven] --> B[Pruebas Unitarias + JaCoCo]
@@ -156,7 +147,7 @@ flowchart TB
     F -->|PASS| G[Build Docker]
     F -.->|FAIL| H[⛔ STOP]
     G --> I[Despliegue Compose]
-    G --> J[Deploy Kubernetes kind]
+    G --> J[Deploy a EC2 vía SSH]
     G --> K[Publish Pipeline Metrics]
 ```
 
@@ -233,64 +224,68 @@ curl http://localhost:8080/actuator/prometheus | grep auth_login
 
 ---
 
-## IE2 — Despliegue en Kubernetes (kind)
+## IE2 — Despliegue en AWS EC2 (GitHub Actions)
 
-### Manifiestos (`k8s/`)
+### Estrategia de despliegue
 
-| Archivo | Recurso | Características clave |
-|---|---|---|
-| `namespace.yaml` | Namespace | `microservicio-prod` |
-| `configmap.yaml` | ConfigMap | Variables no sensibles |
-| `deployment.yaml` | Deployment | 2 réplicas, resources limits, probes, securityContext, annotations Prometheus |
-| `service.yaml` | Service | ClusterIP + Prometheus annotations |
-| `kustomization.yaml` | Kustomization | Punto de entrada `kubectl apply -k` |
+El microservicio se despliega directamente en una instancia **AWS EC2**
+mediante el job `deploy-ec2` del workflow `ci-cd.yml`, que se conecta por
+SSH usando la acción `appleboy/ssh-action`. No se usa orquestación
+(Kubernetes/kind): el despliegue es un *rolling update* simple a nivel de
+contenedor Docker sobre una sola instancia.
 
-### Características del Deployment
+### Características del despliegue
 
-```yaml
-spec:
-  replicas: 2                    # Alta disponibilidad
-  strategy:
-    type: RollingUpdate          # Zero-downtime deploys
-  template:
-    spec:
-      securityContext:
-        runAsNonRoot: true       # No root
-        fsGroup: 2000
-      containers:
-        - name: microservicio-auth
-          resources:
-            requests: { cpu: 100m, memory: 256Mi }
-            limits:   { cpu: 500m, memory: 512Mi }
-          livenessProbe:
-            httpGet: { path: /actuator/health/liveness, port: 8080 }
-          readinessProbe:
-            httpGet: { path: /actuator/health/readiness, port: 8080 }
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/path: "/actuator/prometheus"
+```bash
+# En la instancia EC2, el job ejecuta (resumido):
+docker login -u "$DOCKER_USERNAME" --password-stdin
+docker pull "$DOCKER_USERNAME/microservicio-auth:sha-$GITHUB_SHA"
+
+docker rename auth_api auth_api_old   # conserva el contenedor anterior
+docker run -d --name auth_api --restart always -p 8080:8080 \
+  "$DOCKER_USERNAME/microservicio-auth:sha-$GITHUB_SHA"
+
+# Si el nuevo contenedor no pasa el healthcheck, se revierte
+# automáticamente al contenedor anterior (auth_api_old).
 ```
 
-### Despliegue en GitHub Actions con `kind`
+| Característica | Detalle |
+|---|---|
+| Conexión | SSH (`appleboy/ssh-action`) con clave privada en secret |
+| Imagen | Tag inmutable por commit: `sha-<github.sha>` |
+| Rollback | Automático si el contenedor nuevo no queda `healthy` |
+| Healthcheck | Definido en el `Dockerfile` (`/actuator/health`) |
+| Validación post-deploy | `curl` al endpoint de salud desde el runner |
+| Persistencia | `--restart always`: el contenedor revive si la instancia reinicia |
+| Evidencia | Artefacto `ec2-deploy-evidence` con host, imagen y commit |
 
-El job `deploy-k8s` del workflow `ci-cd.yml`:
+### Despliegue en GitHub Actions
 
-1. Instala `kind` y `kubectl`
-2. Crea un cluster local: `kind create cluster --name gitflow-encargo`
-3. Carga la imagen Docker recién construida: `kind load docker-image`
-4. Aplica los manifests: `kubectl apply -k k8s/`
-5. Espera a que los pods estén ready: `kubectl wait --for=condition=ready`
-6. Ejecuta health check desde dentro del pod
-7. Captura evidencia (pods, services, events) como artefacto
-8. Destruye el cluster: `kind delete cluster`
+El job `deploy-ec2` del workflow `ci-cd.yml`:
 
-### Por qué `kind` y no EKS/AKS/GKE
+1. Se conecta a la instancia EC2 por SSH con las credenciales en secrets
+2. Hace `docker login` y `docker pull` de la imagen recién publicada
+3. Renombra el contenedor en ejecución (`auth_api` → `auth_api_old`)
+4. Levanta el nuevo contenedor con `docker run`
+5. Espera hasta 60s a que el `HEALTHCHECK` del Dockerfile marque `healthy`
+6. Si falla, revierte al contenedor anterior y el job termina con error
+7. Si pasa, elimina el contenedor anterior y limpia imágenes viejas
+8. Valida el endpoint `/actuator/health` desde el runner de GitHub Actions
+9. Sube evidencia del despliegue (host, imagen, commit) como artefacto
 
-`kind` usa imágenes oficiales de Kubernetes y los manifests son **idénticos**
-a los que se desplegarían en una nube real. La diferencia es que corre dentro
-del runner de GitHub Actions, sin requerir credenciales cloud ni generar
-costos por hora de cluster. Migrar a EKS/AKS solo requiere cambiar el job
-de `deploy-k8s` por uno que use `eksctl`/`az` + `kubectl`.
+### Requisitos en la instancia EC2
+
+- Docker instalado y el usuario SSH con permisos para usar `docker` (grupo `docker`)
+- Puerto `8080` abierto en el Security Group (y `22` para SSH)
+- Acceso de salida a Docker Hub para hacer `pull` de la imagen
+
+### Por qué EC2 directo y no un orquestador
+
+Para un único microservicio con 1-2 instancias, un despliegue directo por
+SSH es más simple de operar y depurar que mantener un cluster. El mismo
+patrón (pull de imagen + reemplazo de contenedor + healthcheck + rollback)
+escala bien con un Load Balancer + Auto Scaling Group delante de varias
+instancias EC2 corriendo el mismo contenedor.
 
 ---
 
@@ -349,13 +344,6 @@ En Grafana: **Dashboards → Microservicio Auth → Microservicio Auth — Obser
 | **Audit Script** | Secretos, manifests inválidos | "¿El código cumple políticas?" |
 | **Pipeline Metrics** | Tiempo de ejecución por job | "¿Optimizamos el pipeline?" |
 
-### Diagramas
-
-Para una vista detallada de la arquitectura y el flujo de datos:
-
-- [`docs/architecture.md`](docs/architecture.md) — diagramas Mermaid del pipeline completo
-- [`docs/observability.md`](docs/observability.md) — flujo de métricas + decisiones
-
 ---
 
 ## IE5 — Políticas de Cumplimiento
@@ -407,7 +395,7 @@ Resumen:
 1. **`validation-gate` job** — Gate final que depende de `security-sonar`,
    `security-snyk` y `compliance-audit`. Si alguno falla, este job no se
    ejecuta, y por la cadena de `needs`, tampoco `build-docker`, `despliegue-simulado`
-   ni `deploy-k8s`.
+   ni `deploy-ec2`.
 
 2. **Snyk corregido** — Eliminado el `|| true` del EP2. Ahora usa
    `snyk test --severity-threshold=high --fail-on=all`. Si hay una
@@ -430,7 +418,7 @@ vulnerabilidad crítica conocida (CVE-2022-22965 - Spring4Shell) en
 - Crea una rama temporal y abre un PR
 - Snyk detecta la CVE en el job `security-snyk`
 - `validation-gate` no se ejecuta (depende de Snyk)
-- `build-docker`, `despliegue-simulado` y `deploy-k8s` no se ejecutan
+- `build-docker`, `despliegue-simulado` y `deploy-ec2` no se ejecutan
 - El PR no se puede mergear (branch protection lo bloquea)
 
 **Cómo ejecutar la demo:**
@@ -470,6 +458,10 @@ vulnerabilidad crítica conocida (CVE-2022-22965 - Spring4Shell) en
 | `SNYK_TOKEN` | Token de autenticación de Snyk |
 | `DOCKER_USERNAME` | Usuario de Docker Hub |
 | `DOCKER_PASSWORD` | Contraseña o Access Token de Docker Hub |
+| `EC2_HOST` | IP pública o DNS de la instancia EC2 |
+| `EC2_USERNAME` | Usuario SSH de la instancia (p. ej. `ubuntu`, `ec2-user`) |
+| `EC2_SSH_KEY` | Clave privada SSH (PEM) para conectarse a la instancia |
+| `EC2_PORT` | Puerto SSH de la instancia (normalmente `22`) |
 
 **Secrets opcionales** (solo si se quiere enviar métricas a CloudWatch real):
 - `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` — credenciales IAM
@@ -498,24 +490,26 @@ Servicios:
 - Prometheus: <http://localhost:9090>
 - Grafana: <http://localhost:3000> (admin/admin)
 
-### Desplegar en Kubernetes local (sin GitHub Actions)
+### Desplegar manualmente en EC2 (sin GitHub Actions)
 
 ```bash
-# Requiere kind + kubectl instalados
-kind create cluster --name test
-docker build -t microservicio-auth:local .
-kind load docker-image microservicio-auth:local --name test
+# Construir y publicar la imagen
+docker build -t <usuario_dockerhub>/microservicio-auth:manual .
+docker push <usuario_dockerhub>/microservicio-auth:manual
 
-# Aplicar manifests (con sustitución de imagen)
-sed -i 's|REPLACE_DOCKER_USERNAME|local|; s|REPLACE_GIT_SHA|local|' k8s/deployment.yaml
-kubectl apply -k k8s/
+# Conectarse a la instancia EC2
+ssh -i <clave.pem> <usuario>@<ip-ec2>
+
+# En la instancia: descargar y ejecutar el contenedor
+docker pull <usuario_dockerhub>/microservicio-auth:manual
+docker stop auth_api || true
+docker rm auth_api || true
+docker run -d --name auth_api --restart always -p 8080:8080 \
+  <usuario_dockerhub>/microservicio-auth:manual
 
 # Verificar
-kubectl get pods -n microservicio-prod
-kubectl logs -f deployment/microservicio-auth -n microservicio-prod
-
-# Limpiar
-kind delete cluster --name test
+curl http://localhost:8080/actuator/health
+docker logs -f auth_api
 ```
 
 ### Tests + cobertura
@@ -593,7 +587,7 @@ siguiente uso de herramientas de inteligencia artificial en este proyecto:
 
 | Herramienta | Uso aplicado |
 |---|---|
-| Claude (Anthropic) | Apoyo en la generación del README.md, redacción de manifiestos Kubernetes, dashboards Grafana (JSON), script de auditoría bash, workflows de GitHub Actions y revisión de estructura del proyecto |
+| Claude (Anthropic) | Apoyo en la generación del README.md, workflows de GitHub Actions (incluyendo despliegue a AWS EC2), dashboards Grafana (JSON), script de auditoría bash y revisión de estructura del proyecto |
 
 Todo el contenido generado con IA fue revisado y validado por el estudiante,
 asegurando coherencia con los requerimientos del proyecto y la pauta de

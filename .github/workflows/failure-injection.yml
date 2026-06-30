@@ -6,7 +6,7 @@ name: Failure Injection Demo (IE6)
 # Inyecta una vulnerabilidad conocida (CVE-2022-22965 -
 # Spring4Shell) en pom.xml y demuestra que el job `security-snyk`
 # falla, lo que bloquea `validation-gate` y por extensión
-# `build-docker`, `despliegue-simulado` y `deploy-k8s`.
+# `build-docker`, `despliegue-simulado` y `deploy-ec2`.
 #
 # Solo se ejecuta manualmente (workflow_dispatch) para no
 # contaminar la rama main.
@@ -62,7 +62,7 @@ jobs:
             Comportamiento esperado:
             1. El job `security-snyk` falla (Snyk detecta CVE-2022-22965)
             2. El job `validation-gate` no se ejecuta
-            3. Los jobs `build-docker`, `despliegue-simulado` y `deploy-k8s` no se ejecutan
+            3. Los jobs `build-docker`, `despliegue-simulado` y `deploy-ec2` no se ejecutan
             4. El PR **no puede mergearse** a main (branch protection lo bloquea)
 
             Cierra este PR sin mergear después de capturar la evidencia.
@@ -99,7 +99,7 @@ jobs:
           | validation-gate | ⏸️ SKIPPED | Depende de security-snyk (falló) |
           | build-docker | ⏸️ SKIPPED | Depende de validation-gate |
           | despliegue-simulado | ⏸️ SKIPPED | Depende de build-docker |
-          | deploy-k8s | ⏸️ SKIPPED | Depende de build-docker |
+          | deploy-ec2 | ⏸️ SKIPPED | Depende de build-docker |
 
           ## Verificación
 
@@ -129,6 +129,6 @@ jobs:
           echo ""
           echo "El pipeline se detuvo en security-snyk."
           echo "Los jobs posteriores (validation-gate, build-docker,"
-          echo "despliegue-simulado, deploy-k8s) no se ejecutaron."
+          echo "despliegue-simulado, deploy-ec2) no se ejecutaron."
           echo ""
           echo "Cerrar el PR y eliminar la rama temporal."

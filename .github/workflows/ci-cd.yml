@@ -18,7 +18,7 @@ name: CI/CD Pipeline - Auth Microservice (EP3)
 #   7. publish-pipeline-metrics → métricas CI/CD para dashboards IE3
 #   8. build-docker             → construye y publica imagen
 #   9. despliegue-simulado      → docker-compose local
-#  10. deploy-k8s               → kind + manifests K8s IE2
+#  10. deploy-ec2               → despliegue en AWS EC2 vía SSH
 #
 on:
   push:
@@ -191,7 +191,7 @@ jobs:
       # IE6: el pipeline se DETIENE si Snyk detecta vulnerabilidades
       # de severidad high o critical. Sin `|| true`, exit code != 0
       # marca el job como failed, y `needs` propaga el fallo a
-      # validation-gate → build-docker → deploy-k8s.
+      # validation-gate → build-docker → deploy-ec2.
       # ============================================================
       - name: Analisis de dependencias con Snyk (FAIL ON HIGH/CRITICAL)
         run: snyk test --severity-threshold=high --fail-on=all
@@ -357,110 +357,104 @@ jobs:
         run: docker compose down
 
   # ============================================================
-  # 7. DEPLOYMENT A KUBERNETES (IE2 — kind)
+  # 7. DEPLOYMENT A AWS EC2 (IE2 — GitHub Actions + SSH)
   # ============================================================
-  # Despliega el microservicio en un cluster Kubernetes local
-  # usando `kind` (Kubernetes IN Docker). Simula un entorno
-  # orquestado real sin necesidad de una nube.
-  deploy-k8s:
-    name: Deploy to Kubernetes (kind)
+  # Despliega el microservicio directamente en una instancia EC2
+  # vía SSH: hace pull de la imagen recién publicada en Docker Hub,
+  # reemplaza el contenedor en ejecución y valida el health check
+  # remoto. Sustituye al despliegue orquestado con Kubernetes (kind).
+  deploy-ec2:
+    name: Deploy to EC2
     needs: build-docker
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Instalar kind
-        run: |
-          curl --proto '=https' --tlsv1.2 -Lo ./kind https://kind.sigs.k8s.io/dl/v0.23.0/kind-linux-amd64
-          chmod +x ./kind
-          sudo mv ./kind /usr/local/bin/kind
-          kind version
-
-      - name: Instalar kubectl
-        run: |
-          curl --proto '=https' --tlsv1.2 -LO "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl"
-          curl --proto '=https' --tlsv1.2 -LO "https://dl.k8s.io/release/v1.30.0/bin/linux/amd64/kubectl.sha256"
-          echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/kubectl
-          kubectl version --client
-
-      - name: Crear cluster kind local
-        run: kind create cluster --name gitflow-encargo --wait 60s
-
-      - name: Cargar imagen Docker al cluster
+      - name: Desplegar contenedor en EC2 vía SSH
+        uses: appleboy/ssh-action@7eaf76671fcbc0b2d4c3c4eda9c4e9994e95d5e3  # v1.0.3
         env:
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          IMAGE_TAG: sha-${{ github.sha }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_PORT }}
+          envs: DOCKER_USERNAME,DOCKER_PASSWORD,IMAGE_TAG
+          script: |
+            set -e
+            IMAGE="$DOCKER_USERNAME/microservicio-auth:$IMAGE_TAG"
+            echo "=== Desplegando imagen: $IMAGE ==="
+
+            echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+            docker pull "$IMAGE"
+
+            # Reemplazo sin downtime prolongado: arranca el nuevo
+            # contenedor, valida salud y solo entonces retira el viejo.
+            docker rename auth_api auth_api_old 2>/dev/null || true
+
+            docker run -d \
+              --name auth_api \
+              --restart always \
+              -p 8080:8080 \
+              -e SPRING_APPLICATION_NAME=microservicio-auth \
+              -e SERVER_PORT=8080 \
+              -e AWS_REGION=us-east-1 \
+              -e ENVIRONMENT=production \
+              "$IMAGE"
+
+            echo "=== Esperando a que el contenedor esté saludable ==="
+            for i in $(seq 1 12); do
+              STATUS=$(docker inspect --format='{{.State.Health.Status}}' auth_api 2>/dev/null || echo "starting")
+              echo "Intento $i: estado=$STATUS"
+              if [ "$STATUS" = "healthy" ]; then
+                break
+              fi
+              sleep 5
+            done
+
+            if [ "$STATUS" != "healthy" ]; then
+              echo "El nuevo contenedor no quedó healthy, revirtiendo..."
+              docker stop auth_api || true
+              docker rm auth_api || true
+              docker rename auth_api_old auth_api 2>/dev/null || true
+              docker start auth_api 2>/dev/null || true
+              exit 1
+            fi
+
+            docker stop auth_api_old 2>/dev/null || true
+            docker rm auth_api_old 2>/dev/null || true
+            docker image prune -f
+
+            echo "=== Despliegue en EC2 completado ==="
+            docker ps --filter "name=auth_api"
+
+      - name: Verificar health check remoto
         run: |
-          IMAGE_TAG="$DOCKER_USERNAME/microservicio-auth:sha-${{ github.sha }}"
-          docker pull "$IMAGE_TAG"
-          kind load docker-image "$IMAGE_TAG" --name gitflow-encargo
-
-      - name: Reemplazar placeholders en manifests
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-        run: |
-          # Sustituir REPLACE_DOCKER_USERNAME y REPLACE_GIT_SHA en los manifests
-          USERNAME="$DOCKER_USERNAME"
-          SHA="${{ github.sha }}"
-          IMAGE="${USERNAME}/microservicio-auth:sha-${SHA}"
-          echo "Imagen: $IMAGE"
-
-          # Aplicar transformación con sed
-          find k8s -type f -name "*.yaml" -exec sed -i "s|REPLACE_DOCKER_USERNAME|$USERNAME|g; s|REPLACE_GIT_SHA|sha-$SHA|g" {} \;
-
-          echo "=== Manifiestos actualizados ==="
-          grep -r "image:" k8s/
-
-      - name: Aplicar manifiestos Kubernetes
-        run: |
-          kubectl apply -k k8s/
-
-      - name: Esperar a que los pods estén listos
-        run: |
-          kubectl wait --for=condition=ready pod \
-            -l app=microservicio-auth \
-            -n microservicio-prod \
-            --timeout=120s
-
-      - name: Verificar deployment
-        run: |
-          echo "=== Pods ==="
-          kubectl get pods -n microservicio-prod -o wide
+          sleep 10
+          curl --fail --max-time 10 "http://${{ secrets.EC2_HOST }}:8080/actuator/health"
           echo ""
-          echo "=== Services ==="
-          kubectl get svc -n microservicio-prod
-          echo ""
-          echo "=== Logs del primer pod ==="
-          POD=$(kubectl get pod -n microservicio-prod -l app=microservicio-auth -o jsonpath='{.items[0].metadata.name}')
-          kubectl logs "$POD" -n microservicio-prod --tail=20
+          echo "Health check remoto: OK"
 
-      - name: Test de salud desde dentro del cluster
-        run: |
-          POD=$(kubectl get pod -n microservicio-prod -l app=microservicio-auth -o jsonpath='{.items[0].metadata.name}')
-          kubectl exec "$POD" -n microservicio-prod -- \
-            wget --quiet --tries=1 --spider http://localhost:8080/actuator/health && \
-            echo "Health check: OK" || (echo "Health check: FAIL"; exit 1)
-
-      - name: Capturar estado del cluster como artefacto
+      - name: Capturar evidencia del despliegue
         if: always()
         run: |
-          mkdir -p k8s-evidence
-          kubectl get all -n microservicio-prod -o yaml > k8s-evidence/all-resources.yaml 2>/dev/null || true
-          kubectl describe deployment microservicio-auth -n microservicio-prod > k8s-evidence/deployment.txt 2>/dev/null || true
-          kubectl get events -n microservicio-prod --sort-by='.lastTimestamp' > k8s-evidence/events.txt 2>/dev/null || true
+          mkdir -p ec2-evidence
+          {
+            echo "timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo "host: ${{ secrets.EC2_HOST }}"
+            echo "image: REPLACE_DOCKER_USERNAME/microservicio-auth:sha-${{ github.sha }}"
+            echo "commit: ${{ github.sha }}"
+          } > ec2-evidence/deploy-info.txt
 
-      - name: Subir evidencia de K8s
+      - name: Subir evidencia del despliegue EC2
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: k8s-deploy-evidence
-          path: k8s-evidence/
-
-      - name: Destruir cluster kind
-        if: always()
-        run: kind delete cluster --name gitflow-encargo
+          name: ec2-deploy-evidence
+          path: ec2-evidence/
 
   # ============================================================
   # 8. PUBLICAR MÉTRICAS DEL PIPELINE (IE3)
