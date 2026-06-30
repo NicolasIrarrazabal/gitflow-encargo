@@ -524,59 +524,13 @@ open target/site/jacoco/index.html # Reporte HTML
 
 ## Conclusiones Personales
 
-> Esta evaluación fue realizada de forma **individual** (sin compañero de equipo),
+> Esta evaluación fue realizada de forma individual,
 > por lo que todas las etapas — diseño, implementación, documentación y validación —
-> fueron desarrolladas por una sola persona.
+> fueron desarrolladas por mi.
 
 ### Reflexión Individual
 
-Durante esta evaluación pude profundizar en una dimensión del DevOps que en la
-evaluación anterior había quedado en la superficie: **la observabilidad y la
-orquestación en entornos reales**. En la EP2 había trabajado con métricas y
-calidad de código, pero el alcance era acotado a JaCoCo y SonarCloud. En esta
-EP3 tuve que entender cómo el mismo concepto de "medir" se proyecta a
-infraestructura, redes, logs distribuidos y toma de decisiones automatizada.
-
-**Lo que más me costó fue la integración CloudWatch + Micrometer.** Al
-principio no entendía por qué las métricas no aparecían en CloudWatch, hasta
-que descubrí que necesitaba tanto la dependencia `micrometer-registry-cloudwatch`
-como permisos IAM para `cloudwatch:PutMetricData`. Una vez resuelto, pude
-verificar que las métricas del JVM y las custom (`auth_login_attempts_total`)
-viajaban correctamente al namespace `microservicio-auth`. Ese momento fue
-decisivo porque me hizo entender que observabilidad no es solo "tener un
-endpoint /metrics", sino que cada byte que sale del proceso pasa por varias
-capas hasta llegar a un dashboard.
-
-**Otro punto difícil fue el diseño del `validation-gate`.** Quería un job
-que sirviera como última línea de defensa antes del build Docker, pero sin
-duplicar la lógica de SonarCloud y Snyk. La solución que encontré — declarar
-los tres jobs previos como `needs` — me pareció elegante porque aprovecha
-la semántica nativa de GitHub Actions: si un `need` falla, los dependientes
-simplemente no se ejecutan. Esa decisión también implicó quitar el `|| true`
-de Snyk que había quedado de la EP2, y que era un riesgo: significaba que el
-pipeline podía desplegar imágenes con vulnerabilidades critical.
-
-**Aprendizaje clave sobre Kubernetes:** Antes de esta evaluación, mi
-experiencia con K8s era teórica. Ahora entiendo por qué los manifests tienen
-esa estructura (Deployment → Service → ConfigMap), por qué se separan los
-probes de liveness y readiness, y por qué los `securityContext` importan
-más allá de "cumplir". Trabajar con `kind` dentro del pipeline fue
-particularmente útil porque me permitió iterar rápidamente sin esperar
-que AKS o EKS provisionen un cluster.
-
-**Sobre la demo de IE6:** El workflow `failure-injection.yml` lo diseñé
-pensando en que la evidencia fuera reproducible. Cualquier evaluador puede
-ejecutarlo, ver cómo se inyecta una falla real (CVE-2022-22965), y verificar
-que el pipeline se detiene en el job correspondiente. Esto me parece más
-honesto que simplemente describir en el README "el pipeline falla si hay
-problemas" sin demostrarlo.
-
-**Lo que me llevo para el futuro:** Una operación confiable no se construye
-solo con tests. Se construye con **defensa en profundidad** — Quality Gates,
-auditorías automatizadas, validaciones previas al deploy, alertas en tiempo
-real y capacidad de rollback rápido. Cada herramienta por sí sola no basta;
-lo que importa es cómo se combinan para que una falla crítica nunca llegue
-a producción sin ser detectada.
+Este proyecto me permitió reforzar conocimientos vistos en semestres anteriores, especialmente el despliegue de aplicaciones en una instancia EC2 de AWS y la configuración de Docker para ejecutar el microservicio. Además, comprendí mejor cómo integrar herramientas de monitoreo y validaciones dentro del pipeline CI/CD para mejorar la calidad y confiabilidad de los despliegues. En general, fue una buena oportunidad para aplicar contenidos de distintas asignaturas en un entorno más cercano a un caso real.
 
 ---
 
