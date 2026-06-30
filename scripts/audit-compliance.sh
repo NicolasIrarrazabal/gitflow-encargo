@@ -73,7 +73,7 @@ fi
 # ============================================================
 section "2. Validación de manifiestos Kubernetes"
 
-K8S_FILES=$(find "$REPO_ROOT/k8s" -name "*.yaml" 2>/dev/null)
+K8S_FILES=$(find "$REPO_ROOT/k8s" -name "*.yaml" 2>/dev/null || true)
 if [ -n "$K8S_FILES" ]; then
     for f in $K8S_FILES; do
         if grep -q "^apiVersion:" "$f" && \
