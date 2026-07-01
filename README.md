@@ -557,3 +557,10 @@ apoyo de IA, tal como lo exige la pauta.**
 ## 📚 Documentación adicional
 
 - [`.github/BRANCH_PROTECTION.md`](.github/BRANCH_PROTECTION.md) — Reglas de protección de rama
+
+
+<img width="1910" height="510" alt="image" src="https://github.com/user-attachments/assets/f59d05e5-a2b5-48cd-806b-a564ae6894d6" />
+
+
+<img width="1562" height="432" alt="image" src="https://github.com/user-attachments/assets/acc0bd78-9381-4af3-a7f1-ea5b2bb25df9" />
+
