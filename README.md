@@ -559,6 +559,8 @@ apoyo de IA, tal como lo exige la pauta.**
 - [`.github/BRANCH_PROTECTION.md`](.github/BRANCH_PROTECTION.md) — Reglas de protección de rama
 
 
+Evidencia despliegue EC2
+
 <img width="1910" height="510" alt="image" src="https://github.com/user-attachments/assets/f59d05e5-a2b5-48cd-806b-a564ae6894d6" />
 
 
