@@ -162,9 +162,9 @@ El microservicio expone los siguientes endpoints de observabilidad
 
 | Endpoint | Propósito |
 |---|---|
-| `/actuator/health` | Health check (Docker + K8s probes) |
-| `/actuator/health/liveness` | K8s livenessProbe |
-| `/actuator/health/readiness` | K8s readinessProbe |
+| `/actuator/health` | Health check (usado por Docker HEALTHCHECK y por deploy-ec2) |
+| `/actuator/health/liveness` | Endpoint de liveness (Spring Boot Actuator) |
+| `/actuator/health/readiness` | Endpoint de readiness (Spring Boot Actuator) |
 | `/actuator/prometheus` | Formato Prometheus scrape |
 | `/actuator/metrics` | Métricas en JSON |
 | `/actuator/info` | Info del microservicio |
@@ -355,7 +355,7 @@ En Grafana: **Dashboards → Microservicio Auth → Microservicio Auth — Obser
 | **SonarCloud** | Quality Gate (coverage, bugs, code smells, security hotspots) | Si falla, `validation-gate` no se ejecuta |
 | **Snyk** | Vulnerabilidades en dependencias (high/critical) | Si falla, `validation-gate` no se ejecuta |
 | **JaCoCo** (en `pom.xml`) | Cobertura mínima: 70% líneas, 60% ramas | Si no alcanza, `mvn verify` falla |
-| **`scripts/audit-compliance.sh`** | 3 categorías: secretos hardcoded, manifiestos K8s (estructura + security context), JaCoCo en pom.xml | Job `compliance-audit` falla → bloquea |
+| **`scripts/audit-compliance.sh`** | 3 categorías: secretos hardcoded, configuración segura de despliegue (Dockerfile USER/HEALTHCHECK + secrets de EC2 en el workflow), JaCoCo en pom.xml | Job `compliance-audit` falla → bloquea |
 | **`.github/CODEOWNERS`** | Reviewers automáticos por carpeta | GitHub bloquea el merge sin aprobación |
 | **`.github/BRANCH_PROTECTION.md`** | Documentación de las reglas aplicadas | — |
 
@@ -364,7 +364,7 @@ En Grafana: **Dashboards → Microservicio Auth → Microservicio Auth — Obser
 El script `scripts/audit-compliance.sh` verifica:
 
 1. **Secretos hardcoded** — regex para AWS keys, GitHub PAT, API keys
-2. **Manifiestos K8s válidos** — estructura `apiVersion/kind/metadata` + `runAsNonRoot: true`
+2. **Configuración segura de despliegue (Dockerfile/EC2)** — `Dockerfile` define `USER` no-root y `HEALTHCHECK`; el job `deploy-ec2` referencia `secrets.EC2_HOST`/`secrets.EC2_SSH_KEY` en vez de credenciales hardcoded
 3. **Cobertura JaCoCo** — configurada en `pom.xml` con umbral ≥70%
 
 Exit code:
@@ -439,11 +439,11 @@ vulnerabilidad crítica conocida (CVE-2022-22965 - Spring4Shell) en
 | Mecanismo | Descripción |
 |---|---|
 | **SHA de commit en imagen Docker** | Cada imagen lleva tag `sha-<github.sha>` |
-| **Artefactos de pipeline** | JaCoCo, Snyk, K8s evidence, pipeline metrics |
+| **Artefactos de pipeline** | JaCoCo, Snyk, EC2 deploy evidence, pipeline metrics |
 | **Dependencia entre jobs (`needs`)** | Orden estricto; imposible saltarse etapas |
 | **Branch protection** | Solo push a `main` vía PR + reviews + checks |
 | **Logs de GitHub Actions** | Cada paso con timestamps y output completo |
-| **K8s events** | Capturados como artefacto en cada deploy |
+| **Health check remoto** | Verificado post-deploy contra la instancia EC2 (`/actuator/health`) |
 | **Annotations Prometheus** | Auto-discovery del microservicio en Prometheus |
 
 ---
